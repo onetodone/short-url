@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "noEmit": true
+  },
+  "include": ["src/**/*.ts", "scripts/**/*.ts", "prisma/**/*.ts", "prisma.config.ts", "eslint.config.mjs"]
+}

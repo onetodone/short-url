@@ -1,0 +1,27 @@
+import { Module } from '@nestjs/common'
+import { ConfigModule } from '@nestjs/config'
+import { LoggerModule } from 'nestjs-pino'
+
+import { appConfig } from '@/config/app.config'
+import { cacheConfig } from '@/config/cache.config'
+import { databaseConfig } from '@/config/database.config'
+import { jwtConfig } from '@/config/jwt.config'
+import { redisConfig } from '@/config/redis.config'
+import { shortenerConfig } from '@/config/shortener.config'
+import { validateEnv } from '@/config/env.validation'
+import { loggerOptions } from '@/common/logging/pino.config'
+import { AppController } from '@/app.controller'
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+      validate: validateEnv,
+      load: [appConfig, databaseConfig, redisConfig, jwtConfig, cacheConfig, shortenerConfig],
+    }),
+    LoggerModule.forRoot(loggerOptions),
+  ],
+  controllers: [AppController],
+})
+export class AppModule {}

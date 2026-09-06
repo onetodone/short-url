@@ -42,7 +42,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 
-# prisma client
+# prisma generated client
 /prisma/generated/
 
 # AI Helpers

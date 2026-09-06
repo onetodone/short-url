@@ -1,0 +1,35 @@
+// Prisma schema for the URL shortener.
+// The datasource URL is supplied by prisma.config.ts (from DATABASE_URL).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "./generated"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Url {
+  id          String   @id @default(uuid()) @db.Uuid
+  originalUrl String
+  shortCode   String   @unique // Postgres backs @unique with a B-Tree index — the fast-lookup path
+  clicks      Int      @default(0)
+  userId      String?  @db.Uuid
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  urls Url[]
+}

@@ -1,5 +1,6 @@
 .pnpm-store/
 node_modules/
+prisma/generated/
 *.tsbuildinfo
 package-lock.json
 pnpm-lock.yaml
