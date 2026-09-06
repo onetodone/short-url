@@ -10,6 +10,7 @@ import { redisConfig } from '@/config/redis.config'
 import { shortenerConfig } from '@/config/shortener.config'
 import { validateEnv } from '@/config/env.validation'
 import { loggerOptions } from '@/common/logging/pino.config'
+import { PrismaModule } from '@/database/prisma.module'
 import { AppController } from '@/app.controller'
 
 @Module({
@@ -21,6 +22,7 @@ import { AppController } from '@/app.controller'
       load: [appConfig, databaseConfig, redisConfig, jwtConfig, cacheConfig, shortenerConfig],
     }),
     LoggerModule.forRoot(loggerOptions),
+    PrismaModule,
   ],
   controllers: [AppController],
 })
