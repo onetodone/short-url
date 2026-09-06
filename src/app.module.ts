@@ -11,6 +11,8 @@ import { shortenerConfig } from '@/config/shortener.config'
 import { validateEnv } from '@/config/env.validation'
 import { loggerOptions } from '@/common/logging/pino.config'
 import { PrismaModule } from '@/database/prisma.module'
+import { RedisModule } from '@/redis/redis.module'
+import { HealthModule } from '@/modules/health/health.module'
 import { AppController } from '@/app.controller'
 
 @Module({
@@ -23,6 +25,8 @@ import { AppController } from '@/app.controller'
     }),
     LoggerModule.forRoot(loggerOptions),
     PrismaModule,
+    RedisModule,
+    HealthModule,
   ],
   controllers: [AppController],
 })
