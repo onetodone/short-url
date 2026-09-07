@@ -7,4 +7,5 @@ export const redisConfig = registerAs('redis', () => ({
   port: env.REDIS_PORT,
   password: env.REDIS_PASSWORD || undefined,
   keyPrefix: env.REDIS_KEY_PREFIX,
+  tls: env.REDIS_TLS,
 }))

@@ -158,6 +158,7 @@ the `env` object it exports. An invalid `.env` fails fast at startup.
 | `DATABASE_URL`                                 | –                         | Postgres connection string (required)          |
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / –  | Redis connection                               |
 | `REDIS_KEY_PREFIX`                             | `shorturl:`               | Prefix on every Redis key                      |
+| `REDIS_TLS`                                    | `false`                   | `true` for TLS-only providers (e.g. Upstash)   |
 | `LOG_LEVEL`                                    | `debug` dev / `info` prod | pino level                                     |
 | `SLOW_QUERY_THRESHOLD_MS`                      | `200`                     | Prisma queries at/above this are `warn`-logged |
 | `SHORT_URL_BASE`                               | `http://localhost:$PORT`  | Base used to build the returned `shortUrl`     |

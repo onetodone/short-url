@@ -10,12 +10,14 @@ function createRedisClient(config: ConfigService): Redis {
 
   const host = config.get<string>('redis.host', 'localhost')
   const port = config.get<number>('redis.port', 6379)
+  const tlsEnabled = config.get<boolean>('redis.tls', false)
 
   const options: RedisOptions = {
     host,
     port,
     password: config.get<string>('redis.password') || undefined,
     keyPrefix: config.get<string>('redis.keyPrefix', 'shorturl:'),
+    tls: tlsEnabled ? {} : undefined,
     maxRetriesPerRequest: 3,
     enableAutoPipelining: true,
     enableReadyCheck: true,

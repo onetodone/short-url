@@ -21,6 +21,10 @@ const envSchema = z.object({
   REDIS_PORT: z.coerce.number().int().min(1).default(6379),
   REDIS_PASSWORD: z.string().optional(),
   REDIS_KEY_PREFIX: z.string().default('shorturl:'),
+  REDIS_TLS: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((value) => value === 'true'),
 
   LOG_LEVEL: z.enum(LOG_LEVELS).optional(),
   SLOW_QUERY_THRESHOLD_MS: z.coerce.number().int().min(0).default(200),
