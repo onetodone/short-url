@@ -1,11 +1,26 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, UseGuards } from '@nestjs/common'
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  NotFoundException,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common'
 
 import { API_PREFIX } from '@/common/api-prefix'
 import { CurrentUser } from '@/modules/auth/current-user.decorator'
 import { JwtAuthGuard } from '@/modules/auth/jwt-auth.guard'
 import { CreateUrlDto } from '@/modules/urls/dto/create-url.dto'
 import { ListUrlsDto } from '@/modules/urls/dto/list-urls.dto'
-import { CreatedUrl, UrlList, UrlsService } from '@/modules/urls/urls.service'
+import { UpdateUrlDto } from '@/modules/urls/dto/update-url.dto'
+import { SHORT_CODE_PATTERN } from '@/modules/urls/short-code.util'
+import { CreatedUrl, UrlList, UrlsService, UrlSummary } from '@/modules/urls/urls.service'
 
 @Controller(`${API_PREFIX}/urls`)
 @UseGuards(JwtAuthGuard)
@@ -21,5 +36,27 @@ export class UrlsController {
   @HttpCode(HttpStatus.CREATED)
   create(@Body() dto: CreateUrlDto, @CurrentUser('id') userId: string): Promise<CreatedUrl> {
     return this.urls.create(dto.url, userId)
+  }
+
+  @Patch(':shortCode')
+  update(
+    @Param('shortCode') shortCode: string,
+    @Body() dto: UpdateUrlDto,
+    @CurrentUser('id') userId: string,
+  ): Promise<UrlSummary> {
+    return this.urls.updateForUser(userId, this.requireShortCode(shortCode), dto.url)
+  }
+
+  @Delete(':shortCode')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('shortCode') shortCode: string, @CurrentUser('id') userId: string): Promise<void> {
+    return this.urls.deleteForUser(userId, this.requireShortCode(shortCode))
+  }
+
+  private requireShortCode(shortCode: string): string {
+    if (!SHORT_CODE_PATTERN.test(shortCode)) {
+      throw new NotFoundException('Short code not found')
+    }
+    return shortCode
   }
 }

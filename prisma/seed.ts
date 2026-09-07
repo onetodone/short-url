@@ -15,7 +15,7 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: DATABASE_URL }),
 })
 
-const DEMO_USER_EMAIL = 'demo@short-url.local'
+const DEMO_USER_EMAIL = 'demo@user.loc'
 const DEMO_USER_PASSWORD = 'password123'
 
 const DEMO_URLS: { shortCode: string; originalUrl: string }[] = [

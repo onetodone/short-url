@@ -3,9 +3,9 @@ import { SkipThrottle } from '@nestjs/throttler'
 
 import { MetricsService } from '@/modules/metrics/metrics.service'
 import { ClicksService } from '@/modules/urls/clicks.service'
+import { SHORT_CODE_PATTERN } from '@/modules/urls/short-code.util'
 import { UrlsService } from '@/modules/urls/urls.service'
 
-const SHORT_CODE_PATTERN = /^[0-9A-Za-z]{4,32}$/
 const REDIRECT_STATUS = 301
 
 @SkipThrottle()

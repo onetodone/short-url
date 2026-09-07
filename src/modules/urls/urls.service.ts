@@ -1,10 +1,11 @@
-import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
+import { ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { Redis } from 'ioredis'
 
 import { PrismaService } from '@/database/prisma.service'
 import { MetricsService } from '@/modules/metrics/metrics.service'
 import { InjectRedis } from '@/redis/redis.constants'
+import { ClicksService } from '@/modules/urls/clicks.service'
 import { generateShortCode } from '@/modules/urls/short-code.util'
 import { Prisma } from '@prisma-client'
 
@@ -13,6 +14,7 @@ export interface CreatedUrl {
   shortUrl: string
   originalUrl: string
   createdAt: Date
+  updatedAt: Date
 }
 
 export interface UrlSummary {
@@ -21,6 +23,7 @@ export interface UrlSummary {
   originalUrl: string
   clicks: number
   createdAt: Date
+  updatedAt: Date
 }
 
 export interface UrlList {
@@ -38,6 +41,16 @@ export interface ListUrlsOptions {
 const NEGATIVE_SENTINEL = 'not-found'
 const LOCK_WAIT_ATTEMPTS = 5
 const LOCK_WAIT_INTERVAL_MS = 40
+
+const URL_SUMMARY_SELECT = {
+  shortCode: true,
+  originalUrl: true,
+  clicks: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.UrlSelect
+
+type UrlSummaryRow = Prisma.UrlGetPayload<{ select: typeof URL_SUMMARY_SELECT }>
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -58,6 +71,7 @@ export class UrlsService {
     private readonly prisma: PrismaService,
     @InjectRedis() private readonly redis: Redis,
     private readonly metrics: MetricsService,
+    private readonly clicks: ClicksService,
     config: ConfigService,
   ) {
     this.codeLength = config.get<number>('shortener.codeLength', 7)
@@ -75,7 +89,7 @@ export class UrlsService {
       try {
         const record = await this.prisma.url.create({
           data: { originalUrl, shortCode, userId },
-          select: { shortCode: true, originalUrl: true, createdAt: true },
+          select: { shortCode: true, originalUrl: true, createdAt: true, updatedAt: true },
         })
 
         this.metrics.increment('urls_created_total')
@@ -85,6 +99,7 @@ export class UrlsService {
           shortUrl: `${this.baseUrl}/${record.shortCode}`,
           originalUrl: record.originalUrl,
           createdAt: record.createdAt,
+          updatedAt: record.updatedAt,
         }
       } catch (error) {
         if (this.isUniqueViolation(error)) {
@@ -107,7 +122,7 @@ export class UrlsService {
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.url.findMany({
         where: { userId },
-        select: { shortCode: true, originalUrl: true, clicks: true, createdAt: true },
+        select: URL_SUMMARY_SELECT,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: limit,
         skip: offset,
@@ -116,16 +131,73 @@ export class UrlsService {
     ])
 
     return {
-      items: rows.map((row) => ({
-        shortCode: row.shortCode,
-        shortUrl: `${this.baseUrl}/${row.shortCode}`,
-        originalUrl: row.originalUrl,
-        clicks: row.clicks,
-        createdAt: row.createdAt,
-      })),
+      items: rows.map((row) => this.toSummary(row)),
       total,
       limit,
       offset,
+    }
+  }
+
+  async updateForUser(userId: string, shortCode: string, originalUrl: string): Promise<UrlSummary> {
+    try {
+      const record = await this.prisma.url.update({
+        where: { shortCode, userId },
+        data: { originalUrl },
+        select: URL_SUMMARY_SELECT,
+      })
+
+      await this.evictFromCache(shortCode)
+
+      return this.toSummary(record)
+    } catch (error) {
+      return this.rethrowWriteMiss(error, shortCode, userId)
+    }
+  }
+
+  async deleteForUser(userId: string, shortCode: string): Promise<void> {
+    try {
+      await this.prisma.url.delete({
+        where: { shortCode, userId },
+        select: { id: true },
+      })
+    } catch (error) {
+      await this.rethrowWriteMiss(error, shortCode, userId)
+    }
+
+    await this.evictFromCache(shortCode)
+    await this.clicks.discard(shortCode)
+  }
+
+  private toSummary(row: UrlSummaryRow): UrlSummary {
+    return {
+      shortCode: row.shortCode,
+      shortUrl: `${this.baseUrl}/${row.shortCode}`,
+      originalUrl: row.originalUrl,
+      clicks: row.clicks,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    }
+  }
+
+  private async rethrowWriteMiss(error: unknown, shortCode: string, userId: string): Promise<never> {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      const owner = await this.prisma.url.findUnique({
+        where: { shortCode },
+        select: { userId: true },
+      })
+      if (owner && owner.userId !== userId) {
+        throw new ForbiddenException('You do not own this short URL')
+      }
+      throw new NotFoundException('Short code not found')
+    }
+    throw error
+  }
+
+  private async evictFromCache(shortCode: string): Promise<void> {
+    try {
+      await this.redis.del(this.urlKey(shortCode))
+    } catch (error) {
+      this.logger.warn(`Failed to evict cache for "${shortCode}": ${(error as Error).message}`)
     }
   }
 

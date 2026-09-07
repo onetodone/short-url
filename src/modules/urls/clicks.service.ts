@@ -57,6 +57,14 @@ export class ClicksService implements OnModuleInit, OnModuleDestroy {
       })
   }
 
+  async discard(shortCode: string): Promise<void> {
+    try {
+      await this.redis.multi().del(`${COUNTER_PREFIX}${shortCode}`).srem(DIRTY_SET, shortCode).exec()
+    } catch (error) {
+      this.logger.warn(`Failed to discard click buffer for "${shortCode}": ${(error as Error).message}`)
+    }
+  }
+
   async flush(): Promise<void> {
     if (this.flushing) {
       return

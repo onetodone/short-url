@@ -76,8 +76,10 @@ endpoints (`/health`, `/health/ready`, `/metrics`).
 | `POST /api/v1/auth/login`    | –                                            | `{ email, password }`                    | `200 { user, accessToken, refreshToken }` + cookie                 |
 | `POST /api/v1/auth/refresh`  | refresh token (cookie or `{ refreshToken }`) | –                                        | `200` rotated token pair                                           |
 | `GET /api/v1/auth/me`        | Bearer access token                          | –                                        | `200 { id, email, createdAt }`                                     |
-| `POST /api/v1/urls`          | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars) | `201 { shortCode, shortUrl, originalUrl, createdAt }`              |
+| `POST /api/v1/urls`          | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars) | `201 { shortCode, shortUrl, originalUrl, createdAt, updatedAt }`   |
 | `GET /api/v1/urls`           | Bearer access token                          | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first |
+| `PATCH /api/v1/urls/:shortCode` | Bearer access token (**owner only**)      | `{ url }` (only the destination is mutable) | `200 { shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }` · `403` not owner · `404` unknown |
+| `DELETE /api/v1/urls/:shortCode` | Bearer access token (**owner only**)     | –                                        | `204` · `403` not owner · `404` unknown                            |
 | `GET /:shortCode`            | –                                            | –                                        | `301 Location: <originalUrl>` · `404` unknown / malformed          |
 | `GET /health`                | –                                            | –                                        | `200 { status: "ok" }` (liveness)                                  |
 | `GET /health/ready`          | –                                            | –                                        | `200 { status, database, redis }` · `503` if a dependency is down  |
@@ -89,9 +91,15 @@ The submitted URL is normalised (`new URL().href`) before it is stored, so
 fresh short code — there is no uniqueness on `originalUrl`.
 
 `GET /api/v1/urls` returns the authenticated caller's URLs only, newest first, as
-`{ shortCode, shortUrl, originalUrl, clicks, createdAt }`. `total` is the caller's full count
-(for paging); `clicks` is the value last flushed from the Redis buffer, so it can trail the live
-count by up to `CLICKS_FLUSH_INTERVAL_MS`.
+`{ shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }`. `total` is the caller's full
+count (for paging); `clicks` is the value last flushed from the Redis buffer, so it can trail the
+live count by up to `CLICKS_FLUSH_INTERVAL_MS`.
+
+`PATCH` and `DELETE` act on a single short code and require the caller to own it — a code owned by
+someone else returns `403`, an unknown code `404`. `PATCH` changes **only** the destination URL (it
+is re-normalised the same way as on create) and bumps `updatedAt`. Both operations keep Redis
+consistent: the cached destination is evicted on either, and `DELETE` also drops the code's pending
+click buffer so a later flush cannot revive a deleted row.
 
 ### Routing
 
@@ -300,7 +308,7 @@ src/
   database/                  PrismaService (pg adapter, slow-query event log) + @Global module
   redis/                     tuned ioredis client + @Global module + InjectRedis()
   modules/
-    urls/                    create + list + resolve, short-code CSPRNG, click buffer, redirect controller
+    urls/                    create + list + update + delete + resolve, short-code CSPRNG, click buffer, redirect controller
     auth/                    bcrypt, JWT issue/verify, guard, @CurrentUser, cookie handling
     health/                  liveness + readiness
     metrics/                 in-memory counters + Prometheus endpoint

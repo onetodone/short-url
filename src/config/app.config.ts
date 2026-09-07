@@ -6,7 +6,6 @@ export const appConfig = registerAs('app', () => ({
   apiPrefix: process.env.API_PREFIX ?? 'api/v1',
   corsOrigin: process.env.CORS_ORIGIN ?? '*',
   cookieSecret: process.env.COOKIE_SECRET,
-  debugMode: process.env.DEBUG_MODE === 'true',
   throttleTtl: parseInt(process.env.THROTTLE_TTL ?? '60000', 10),
   throttleLimit: parseInt(process.env.THROTTLE_LIMIT ?? '100', 10),
   slowQueryThresholdMs: parseInt(process.env.SLOW_QUERY_THRESHOLD_MS ?? '200', 10),

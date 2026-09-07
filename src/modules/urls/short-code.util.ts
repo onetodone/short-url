@@ -8,6 +8,8 @@ const ALPHABET_SIZE = ALPHABET.length // 62
 
 const REJECTION_THRESHOLD = 256 - (256 % ALPHABET_SIZE)
 
+export const SHORT_CODE_PATTERN = /^[0-9A-Za-z]{4,32}$/
+
 export async function generateShortCode(length: number): Promise<string> {
   let code = ''
 
