@@ -13,6 +13,7 @@ import { loggerOptions } from '@/common/logging/pino.config'
 import { PrismaModule } from '@/database/prisma.module'
 import { RedisModule } from '@/redis/redis.module'
 import { HealthModule } from '@/modules/health/health.module'
+import { UrlsModule } from '@/modules/urls/urls.module'
 import { AppController } from '@/app.controller'
 
 @Module({
@@ -27,6 +28,7 @@ import { AppController } from '@/app.controller'
     PrismaModule,
     RedisModule,
     HealthModule,
+    UrlsModule,
   ],
   controllers: [AppController],
 })
