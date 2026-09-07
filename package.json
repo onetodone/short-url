@@ -1,6 +1,6 @@
 {
   "name": "@onetodone/short-url",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "High-performance URL shortener (NestJS + Fastify + Prisma + Redis)",
   "private": true,
   "author": "Anton Holubeu (https://github.com/aholu)",
@@ -22,7 +22,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
     "loadtest:seed": "tsx scripts/seed-loadtest.ts",
-    "loadtest": "tsx scripts/load-test.ts"
+    "loadtest": "tsx scripts/load-test.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

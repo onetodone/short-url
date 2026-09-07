@@ -4,10 +4,26 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on a PR branch; never cancel a push to main.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  # Node 24 is the current LTS. @types/node tracks a newer line, but the build is
+  # a plain tsc transpile so the runtime only needs to be recent enough for the app.
+  NODE_VERSION: "24"
 
 jobs:
-  build:
+  quality:
+    name: Lint · Typecheck · Build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -15,11 +31,111 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 26
+          node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm exec prisma generate
+
+      - name: Validate Prisma schema
+        run: pnpm exec prisma validate
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
       - run: pnpm lint:ci
+
       - run: pnpm typecheck
+
       - run: pnpm build
+
+  e2e:
+    name: Migrate · Smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: short_url
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    # The app validates env at boot; only CORS_ORIGIN, DATABASE_URL and JWT_SECRET
+    # are required — every other key has a default in src/config/*.
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/short_url?schema=public
+      CORS_ORIGIN: "*"
+      JWT_SECRET: ci-smoke-secret-only-not-for-production
+      REDIS_HOST: localhost
+      REDIS_PORT: "6379"
+      REDIS_KEY_PREFIX: "shorturl-ci:"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Apply migrations
+        run: pnpm exec prisma migrate deploy
+
+      - name: Check the migrated database matches the schema
+        run: >-
+          pnpm exec prisma migrate diff
+          --from-config-datasource
+          --to-schema prisma/schema.prisma
+          --exit-code
+
+      - name: Build
+        run: pnpm build
+
+      - name: Boot app and run smoke test
+        env:
+          NODE_ENV: production
+          PORT: "3000"
+          # info keeps the per-request completion logs — useful when a smoke check fails.
+          LOG_LEVEL: info
+          BASE_URL: http://localhost:3000
+          SMOKE_BOOT_TIMEOUT_MS: "60000"
+        run: |
+          node dist/src/main > "$RUNNER_TEMP/app.log" 2>&1 &
+          app_pid=$!
+          set +e
+          pnpm smoke
+          status=$?
+          set -e
+          kill "$app_pid" 2>/dev/null || true
+          wait "$app_pid" 2>/dev/null || true
+          exit $status
+
+      - name: App logs
+        if: always()
+        run: cat "$RUNNER_TEMP/app.log" 2>/dev/null || true

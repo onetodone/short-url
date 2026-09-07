@@ -254,6 +254,20 @@ pnpm loadtest:seed -- --reset --count 1     # drop the load-test rows
 | `pnpm db:seed`                          | demo user + demo URLs                                    |
 | `pnpm loadtest:seed`                    | populate the load-test dataset                           |
 | `pnpm loadtest`                         | run the autocannon benchmark                             |
+| `pnpm smoke`                            | end-to-end smoke check against a running instance        |
+
+---
+
+## Continuous integration
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on every push to `main`, every pull
+request, and on demand (`workflow_dispatch`):
+
+- **`quality`** — `pnpm install --frozen-lockfile`, `prisma validate`, `prisma generate`, `lint:ci`,
+  `typecheck`, `build`.
+- **`e2e`** — starts Postgres + Redis service containers, applies migrations, fails on any schema
+  drift (`prisma migrate diff … --exit-code`), builds, boots the app, and runs `pnpm smoke`
+  (`scripts/smoke.ts`) against it — liveness, readiness, auth, create, redirect, and `/metrics`.
 
 ---
 
@@ -281,6 +295,7 @@ scripts/
   loadtest.shared.ts         fixtures shared by the two harness scripts
   seed-loadtest.ts           bulk-insert N URLs, dump codes to .loadtest-codes.txt
   load-test.ts               autocannon read-heavy + mixed scenarios
+  smoke.ts                   end-to-end smoke check (used by CI)
 ```
 
 ---
