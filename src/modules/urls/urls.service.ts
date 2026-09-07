@@ -15,6 +15,26 @@ export interface CreatedUrl {
   createdAt: Date
 }
 
+export interface UrlSummary {
+  shortCode: string
+  shortUrl: string
+  originalUrl: string
+  clicks: number
+  createdAt: Date
+}
+
+export interface UrlList {
+  items: UrlSummary[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface ListUrlsOptions {
+  limit: number
+  offset: number
+}
+
 const NEGATIVE_SENTINEL = 'not-found'
 const LOCK_WAIT_ATTEMPTS = 5
 const LOCK_WAIT_INTERVAL_MS = 40
@@ -79,6 +99,34 @@ export class UrlsService {
 
     this.logger.error(`Exhausted ${this.maxRetries} attempts to allocate a unique short code`)
     throw new ServiceUnavailableException('Could not allocate a unique short code, please retry')
+  }
+
+  async listForUser(userId: string, options: ListUrlsOptions): Promise<UrlList> {
+    const { limit, offset } = options
+
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.url.findMany({
+        where: { userId },
+        select: { shortCode: true, originalUrl: true, clicks: true, createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: limit,
+        skip: offset,
+      }),
+      this.prisma.url.count({ where: { userId } }),
+    ])
+
+    return {
+      items: rows.map((row) => ({
+        shortCode: row.shortCode,
+        shortUrl: `${this.baseUrl}/${row.shortCode}`,
+        originalUrl: row.originalUrl,
+        clicks: row.clicks,
+        createdAt: row.createdAt,
+      })),
+      total,
+      limit,
+      offset,
+    }
   }
 
   async resolve(shortCode: string): Promise<string> {

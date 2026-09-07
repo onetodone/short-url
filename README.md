@@ -77,6 +77,7 @@ endpoints (`/health`, `/health/ready`, `/metrics`).
 | `POST /api/v1/auth/refresh`  | refresh token (cookie or `{ refreshToken }`) | –                                        | `200` rotated token pair                                           |
 | `GET /api/v1/auth/me`        | Bearer access token                          | –                                        | `200 { id, email, createdAt }`                                     |
 | `POST /api/v1/urls`          | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars) | `201 { shortCode, shortUrl, originalUrl, createdAt }`              |
+| `GET /api/v1/urls`           | Bearer access token                          | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first |
 | `GET /:shortCode`            | –                                            | –                                        | `301 Location: <originalUrl>` · `404` unknown / malformed          |
 | `GET /health`                | –                                            | –                                        | `200 { status: "ok" }` (liveness)                                  |
 | `GET /health/ready`          | –                                            | –                                        | `200 { status, database, redis }` · `503` if a dependency is down  |
@@ -86,6 +87,19 @@ endpoints (`/health`, `/health/ready`, `/metrics`).
 The submitted URL is normalised (`new URL().href`) before it is stored, so
 `  HTTPS://Example.COM/A B  ` persists as `https://example.com/A%20B`. Duplicate URLs always get a
 fresh short code — there is no uniqueness on `originalUrl`.
+
+`GET /api/v1/urls` returns the authenticated caller's URLs only, newest first, as
+`{ shortCode, shortUrl, originalUrl, clicks, createdAt }`. `total` is the caller's full count
+(for paging); `clicks` is the value last flushed from the Redis buffer, so it can trail the live
+count by up to `CLICKS_FLUSH_INTERVAL_MS`.
+
+### Routing
+
+The JSON API controllers each carry `API_PREFIX` (`main.ts` preloads `.env` via `@/common/load-env`
+so the prefix is known before the `@Controller()` decorators evaluate). The redirect and the ops
+endpoints are mounted at the root. A single global prefix is not used: it can only keep the bare
+`GET /:shortCode` redirect at the root by `exclude`-ing the `:shortCode` pattern, which also strips
+the prefix from every other single-segment route (e.g. `GET /api/v1/urls`).
 
 ### Example
 
@@ -279,12 +293,14 @@ src/
   main.ts                    Fastify bootstrap (trustProxy, cookie, global prefix + excludes, Zod pipe)
   app.module.ts              config + logger + throttler + feature modules
   config/                    registerAs factories + zod env validation
+  common/load-env.ts         side-effect `.env` load, imported first by main.ts
+  common/api-prefix.ts       API_PREFIX constant shared by the JSON API controllers
   common/logging/            pino config (redaction, request serializers, userId custom prop)
   common/types/http.d.ts     FastifyRequest / IncomingMessage `user` augmentation
   database/                  PrismaService (pg adapter, slow-query event log) + @Global module
   redis/                     tuned ioredis client + @Global module + InjectRedis()
   modules/
-    urls/                    create + resolve, short-code CSPRNG, click buffer, redirect controller
+    urls/                    create + list + resolve, short-code CSPRNG, click buffer, redirect controller
     auth/                    bcrypt, JWT issue/verify, guard, @CurrentUser, cookie handling
     health/                  liveness + readiness
     metrics/                 in-memory counters + Prometheus endpoint
