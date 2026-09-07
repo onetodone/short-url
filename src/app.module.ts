@@ -12,6 +12,7 @@ import { validateEnv } from '@/config/env.validation'
 import { loggerOptions } from '@/common/logging/pino.config'
 import { PrismaModule } from '@/database/prisma.module'
 import { RedisModule } from '@/redis/redis.module'
+import { AuthModule } from '@/modules/auth/auth.module'
 import { HealthModule } from '@/modules/health/health.module'
 import { UrlsModule } from '@/modules/urls/urls.module'
 import { AppController } from '@/app.controller'
@@ -27,6 +28,7 @@ import { AppController } from '@/app.controller'
     LoggerModule.forRoot(loggerOptions),
     PrismaModule,
     RedisModule,
+    AuthModule,
     HealthModule,
     UrlsModule,
   ],

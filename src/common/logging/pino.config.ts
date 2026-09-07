@@ -1,9 +1,6 @@
 import type { Params } from 'nestjs-pino'
-import type { IncomingMessage } from 'node:http'
 
 const isProduction = process.env.NODE_ENV === 'production'
-
-type AuthenticatedMessage = IncomingMessage & { user?: { id?: string } }
 
 export const loggerOptions: Params = {
   pinoHttp: {
@@ -29,7 +26,7 @@ export const loggerOptions: Params = {
       censor: '[redacted]',
     },
     customProps: (req) => ({
-      userId: (req as AuthenticatedMessage).user?.id ?? null,
+      userId: req.user?.id ?? null,
     }),
   },
 }

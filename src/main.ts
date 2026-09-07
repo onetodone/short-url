@@ -1,3 +1,4 @@
+import fastifyCookie from '@fastify/cookie'
 import { RequestMethod } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { NestFactory } from '@nestjs/core'
@@ -23,6 +24,9 @@ async function bootstrap(): Promise<void> {
   const port = config.get<number>('app.port', 3000)
   const apiPrefix = config.get<string>('app.apiPrefix', 'api/v1')
   const corsOrigin = config.get<string>('app.corsOrigin', '*')
+  const cookieSecret = config.get<string>('app.cookieSecret')
+
+  await app.register(fastifyCookie, cookieSecret ? { secret: cookieSecret } : {})
 
   // The API sits under `apiPrefix`; the public redirect and the ops endpoints do not.
   app.setGlobalPrefix(apiPrefix, {

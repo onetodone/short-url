@@ -22,7 +22,7 @@ const envSchema = z.object({
   THROTTLE_TTL: z.coerce.number().int().optional(),
   THROTTLE_LIMIT: z.coerce.number().int().optional(),
 
-  JWT_SECRET: z.string(),
+  JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
   JWT_EXPIRES_IN: z.string().optional(),
   JWT_REFRESH_EXPIRES_IN: z.string().optional(),
 
