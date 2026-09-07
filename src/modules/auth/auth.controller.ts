@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config'
 import { Throttle } from '@nestjs/throttler'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
+import { API_PREFIX } from '@/common/api-prefix'
 import { AuthService } from '@/modules/auth/auth.service'
 import type { AuthResult } from '@/modules/auth/auth.types'
 import { CurrentUser } from '@/modules/auth/current-user.decorator'
@@ -31,7 +32,7 @@ interface AuthResponse {
   refreshToken: string
 }
 
-@Controller('auth')
+@Controller(`${API_PREFIX}/auth`)
 export class AuthController {
   private readonly cookiePath: string
   private readonly cookieSecure: boolean

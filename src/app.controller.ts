@@ -1,8 +1,10 @@
 import { Controller, Get } from '@nestjs/common'
 import { SkipThrottle } from '@nestjs/throttler'
 
+import { API_PREFIX } from '@/common/api-prefix'
+
 @SkipThrottle()
-@Controller()
+@Controller(API_PREFIX)
 export class AppController {
   @Get()
   info(): { name: string; version: string } {
