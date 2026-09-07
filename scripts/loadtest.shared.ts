@@ -16,7 +16,7 @@ export const CODES_FILE = resolve(__dirname, '.loadtest-codes.txt')
  * > `SHORT_URL_BASE` > the dev default.
  */
 export function resolveTargetUrl(): string {
-  const raw = process.env.LOADTEST_TARGET_URL ?? process.env.SHORT_URL_BASE ?? 'http://localhost:3500'
+  const raw = process.env.LOADTEST_TARGET_URL ?? process.env.SHORT_URL_BASE ?? 'http://localhost:3000'
   return raw.replace(/\/+$/, '')
 }
 

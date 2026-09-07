@@ -56,12 +56,12 @@ pnpm db:seed                         # optional: 1 demo user + 4 demo short URLs
 ### Run
 
 ```bash
-pnpm start:dev                       # watch mode, pino-pretty logs, :3500
+pnpm start:dev                       # watch mode, pino-pretty logs, :3000
 # or
 pnpm build && pnpm start:prod        # compiled dist/, JSON logs
 ```
 
-The service listens on `PORT` (default `3500` in `.env`, `3000` if unset) on `0.0.0.0`.
+The service listens on `PORT` (`3000` if unset in `.env`) on `0.0.0.0`.
 
 ---
 
@@ -91,18 +91,18 @@ fresh short code — there is no uniqueness on `originalUrl`.
 
 ```bash
 # register -> capture the access token
-TOKEN=$(curl -sX POST localhost:3500/api/v1/auth/register \
+TOKEN=$(curl -sX POST localhost:3000/api/v1/auth/register \
   -H 'content-type: application/json' \
   -d '{"email":"a@b.com","password":"password123"}' | jq -r .accessToken)
 
 # create
-curl -sX POST localhost:3500/api/v1/urls \
+curl -sX POST localhost:3000/api/v1/urls \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"url":"https://example.com/some/long/path"}'
-# { "shortCode":"aB3xK9p", "shortUrl":"http://localhost:3500/aB3xK9p", ... }
+# { "shortCode":"aB3xK9p", "shortUrl":"http://localhost:3000/aB3xK9p", ... }
 
 # resolve (1st = Cache Miss, 2nd = Cache Hit; both 301)
-curl -si localhost:3500/aB3xK9p | head -1
+curl -si localhost:3000/aB3xK9p | head -1
 ```
 
 ---
@@ -114,7 +114,7 @@ All keys are validated at boot by `src/config/env.validation.ts`; an invalid `.e
 | Key                                            | Default                   | Purpose                                        |
 | ---------------------------------------------- | ------------------------- | ---------------------------------------------- |
 | `NODE_ENV`                                     | `development`             | `development` \| `production` \| `test`        |
-| `PORT`                                         | `3000`                    | HTTP listen port (`.env` ships `3500`)         |
+| `PORT`                                         | `3000`                    | HTTP listen port         |
 | `API_PREFIX`                                   | `api/v1`                  | Prefix for the JSON API                        |
 | `CORS_ORIGIN`                                  | –                         | Comma-separated allow-list (`*` = reflect any) |
 | `COOKIE_SECRET`                                | –                         | Optional `@fastify/cookie` signing secret      |
@@ -199,7 +199,7 @@ pnpm loadtest -- --scenario mixed --json        # write raw results to loadtest-
 | `--duration`    | `20`                                                                 | seconds per scenario                                                            |
 | `--connections` | `50`                                                                 | concurrent connections                                                          |
 | `--pipelining`  | `1`                                                                  | pipelined requests per connection (read scenario only)                          |
-| `--url`         | `$LOADTEST_TARGET_URL` → `$SHORT_URL_BASE` → `http://localhost:3500` | target base URL                                                                 |
+| `--url`         | `$LOADTEST_TARGET_URL` → `$SHORT_URL_BASE` → `http://localhost:3000` | target base URL                                                                 |
 | `--json`        | off                                                                  | dump each `autocannon` result to `loadtest-results/<timestamp>-<scenario>.json` |
 | `--verbose`     | off                                                                  | also print `autocannon`'s own results table                                     |
 
