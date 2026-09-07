@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { Redis } from 'ioredis'
 
@@ -150,7 +150,7 @@ export class UrlsService {
 
       return this.toSummary(record)
     } catch (error) {
-      return this.rethrowWriteMiss(error, shortCode, userId)
+      return this.rethrowWriteMiss(error)
     }
   }
 
@@ -161,7 +161,7 @@ export class UrlsService {
         select: { id: true },
       })
     } catch (error) {
-      await this.rethrowWriteMiss(error, shortCode, userId)
+      this.rethrowWriteMiss(error)
     }
 
     await this.evictFromCache(shortCode)
@@ -179,15 +179,8 @@ export class UrlsService {
     }
   }
 
-  private async rethrowWriteMiss(error: unknown, shortCode: string, userId: string): Promise<never> {
+  private rethrowWriteMiss(error: unknown): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
-      const owner = await this.prisma.url.findUnique({
-        where: { shortCode },
-        select: { userId: true },
-      })
-      if (owner && owner.userId !== userId) {
-        throw new ForbiddenException('You do not own this short URL')
-      }
       throw new NotFoundException('Short code not found')
     }
     throw error

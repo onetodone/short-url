@@ -42,8 +42,7 @@ export class AuthController {
     private readonly auth: AuthService,
     config: ConfigService,
   ) {
-    const apiPrefix = config.get<string>('app.apiPrefix', 'api/v1').replace(/^\/+|\/+$/g, '')
-    this.cookiePath = `/${apiPrefix}/auth`
+    this.cookiePath = `/${API_PREFIX}/auth`
     this.cookieSecure = config.get<string>('app.nodeEnv', 'production') === 'production'
     this.refreshMaxAgeSeconds = parseDurationSeconds(
       config.get<string>('jwt.refreshExpiresIn', '7d'),

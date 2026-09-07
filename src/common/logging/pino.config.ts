@@ -1,10 +1,12 @@
 import type { Params } from 'nestjs-pino'
 
-const isProduction = process.env.NODE_ENV === 'production'
+import { env } from '@/config/env'
+
+const isProduction = env.NODE_ENV === 'production'
 
 export const loggerOptions: Params = {
   pinoHttp: {
-    level: process.env.LOG_LEVEL ?? (isProduction ? 'info' : 'debug'),
+    level: env.LOG_LEVEL ?? (isProduction ? 'info' : 'debug'),
     transport: isProduction
       ? undefined
       : {
