@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import type { Redis } from 'ioredis'
 
 import { PrismaService } from '@/database/prisma.service'
+import { MetricsService } from '@/modules/metrics/metrics.service'
 import { InjectRedis } from '@/redis/redis.constants'
 
 const COUNTER_PREFIX = 'clicks:'
@@ -24,6 +25,7 @@ export class ClicksService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     @InjectRedis() private readonly redis: Redis,
+    private readonly metrics: MetricsService,
     config: ConfigService,
   ) {
     this.flushIntervalMs = config.get<number>('cache.clicksFlushIntervalMs', 5000)
@@ -91,8 +93,11 @@ export class ClicksService implements OnModuleInit, OnModuleDestroy {
             }),
           ),
         )
-        this.logger.debug(`Flushed click counters for ${deltas.length} code(s)`)
+        const flushed = deltas.reduce((sum, { delta }) => sum + delta, 0)
+        this.metrics.increment('clicks_flushed_total', flushed)
+        this.logger.debug(`Flushed ${flushed} click(s) for ${deltas.length} code(s)`)
       } catch (error) {
+        this.metrics.increment('clicks_flush_errors_total')
         this.logger.warn(
           `Click flush to Postgres failed, re-buffering ${deltas.length} code(s): ${(error as Error).message}`,
         )

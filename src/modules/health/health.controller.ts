@@ -1,4 +1,5 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common'
+import { SkipThrottle } from '@nestjs/throttler'
 import { Redis } from 'ioredis'
 
 import { PrismaService } from '@/database/prisma.service'
@@ -14,6 +15,7 @@ interface ReadinessReport {
 
 const READINESS_PROBE_TIMEOUT_MS = 1000
 
+@SkipThrottle()
 @Controller()
 export class HealthController {
   constructor(

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
+import { Throttle } from '@nestjs/throttler'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 import { AuthService } from '@/modules/auth/auth.service'
@@ -22,6 +23,7 @@ import { JwtAuthGuard } from '@/modules/auth/jwt-auth.guard'
 
 const REFRESH_COOKIE = 'refresh_token'
 const DEFAULT_REFRESH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
+const AUTH_THROTTLE = { default: { limit: 10, ttl: 60_000 } }
 
 interface AuthResponse {
   user: { id: string; email: string }
@@ -50,6 +52,7 @@ export class AuthController {
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @Throttle(AUTH_THROTTLE)
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) reply: FastifyReply): Promise<AuthResponse> {
     const result = await this.auth.register(dto.email, dto.password)
     return this.finish(reply, result)
@@ -57,6 +60,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle(AUTH_THROTTLE)
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) reply: FastifyReply): Promise<AuthResponse> {
     const result = await this.auth.login(dto.email, dto.password)
     return this.finish(reply, result)
@@ -64,6 +68,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @Throttle(AUTH_THROTTLE)
   async refresh(
     @Req() request: FastifyRequest,
     @Res({ passthrough: true }) reply: FastifyReply,

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config'
 import type { Redis } from 'ioredis'
 
 import { PrismaService } from '@/database/prisma.service'
+import { MetricsService } from '@/modules/metrics/metrics.service'
 import { InjectRedis } from '@/redis/redis.constants'
 import { generateShortCode } from '@/modules/urls/short-code.util'
 import { Prisma } from '@prisma-client'
@@ -36,6 +37,7 @@ export class UrlsService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectRedis() private readonly redis: Redis,
+    private readonly metrics: MetricsService,
     config: ConfigService,
   ) {
     this.codeLength = config.get<number>('shortener.codeLength', 7)
@@ -55,6 +57,8 @@ export class UrlsService {
           data: { originalUrl, shortCode, userId },
           select: { shortCode: true, originalUrl: true, createdAt: true },
         })
+
+        this.metrics.increment('urls_created_total')
 
         return {
           shortCode: record.shortCode,
@@ -80,6 +84,7 @@ export class UrlsService {
   async resolve(shortCode: string): Promise<string> {
     const cached = await this.readCache(shortCode)
     if (cached !== null) {
+      this.metrics.increment('cache_hits_total')
       this.logger.debug(`Cache Hit for "${shortCode}"`)
       if (cached === NEGATIVE_SENTINEL) {
         throw new NotFoundException('Short code not found')
@@ -87,6 +92,7 @@ export class UrlsService {
       return cached
     }
 
+    this.metrics.increment('cache_misses_total')
     this.logger.debug(`Cache Miss for "${shortCode}"`)
 
     let task = this.inFlight.get(shortCode)
