@@ -1,1 +1,290 @@
 # Short URL
+
+A high-performance URL shortener built for the read path. Redirects are served from a Redis
+cache-aside layer with stampede protection, click analytics are buffered in Redis and flushed to
+Postgres in batches, and the `301` response never waits on a database write.
+
+- **Framework:** NestJS 12 on the **Fastify** adapter
+- **Storage:** PostgreSQL via Prisma 7 (`prisma-client` generator, `pg` driver adapter)
+- **Cache / buffer:** Redis via `ioredis`
+- **Validation:** `zod` DTOs through `nestjs-zod`
+- **Auth:** stateless JWT (access + refresh), custom guard — no Passport
+- **Observability:** `nestjs-pino` structured logs, Prometheus `/metrics`, `/health` + `/health/ready`
+- **Rate limiting:** `@nestjs/throttler` (in-memory, per-IP)
+
+---
+
+## Request flow
+
+```
+POST /api/v1/urls                       GET /:shortCode
+  JwtAuthGuard                            (public, @SkipThrottle)
+  ThrottlerGuard (global)                 code regex guard  -> 404 on junk
+  ZodValidationPipe                       UrlsService.resolve(code)
+  UrlsService.create()                      1. in-process Promise dedupe map
+    generateShortCode (async CSPRNG)        2. Redis GET  -> hit / negative sentinel
+    prisma.url.create (retry on P2002)      3. miss: SET NX lock -> prisma.findUnique
+  -> 201 { shortCode, shortUrl, ... }              -> SET EX (url | "not-found")
+                                           ClicksService.increment(code)   (fire-and-forget)
+                                         -> 301 Location: <originalUrl>
+
+ClicksService: INCR shorturl:clicks:{code} + SADD shorturl:clicks:dirty
+               setInterval(flush): GETDEL each dirty code -> one prisma.$transaction of updateMany
+```
+
+---
+
+## Requirements
+
+- **Node.js 22+** and **pnpm**
+- **PostgreSQL 18** and **Redis**, reachable at the addresses configured in `.env`
+  (`DATABASE_URL`, `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD`). Create the database
+  before running the migrations.
+
+---
+
+## Setup
+
+```bash
+pnpm install                         # also runs `prisma generate` (postinstall)
+cp .env.example .env                 # then edit DATABASE_URL / JWT_SECRET / ports
+pnpm prisma:migrate                  # apply migrations
+pnpm db:seed                         # optional: 1 demo user + 4 demo short URLs
+```
+
+### Run
+
+```bash
+pnpm start:dev                       # watch mode, pino-pretty logs, :3500
+# or
+pnpm build && pnpm start:prod        # compiled dist/, JSON logs
+```
+
+The service listens on `PORT` (default `3500` in `.env`, `3000` if unset) on `0.0.0.0`.
+
+---
+
+## API
+
+`API_PREFIX` (default `api/v1`) applies to every route **except** the public redirect and the ops
+endpoints (`/health`, `/health/ready`, `/metrics`).
+
+| Method & path                | Auth                                         | Body                                     | Result                                                             |
+| ---------------------------- | -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------ |
+| `POST /api/v1/auth/register` | –                                            | `{ email, password }` (password 8–128)   | `201 { user, accessToken, refreshToken }` + `refresh_token` cookie |
+| `POST /api/v1/auth/login`    | –                                            | `{ email, password }`                    | `200 { user, accessToken, refreshToken }` + cookie                 |
+| `POST /api/v1/auth/refresh`  | refresh token (cookie or `{ refreshToken }`) | –                                        | `200` rotated token pair                                           |
+| `GET /api/v1/auth/me`        | Bearer access token                          | –                                        | `200 { id, email, createdAt }`                                     |
+| `POST /api/v1/urls`          | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars) | `201 { shortCode, shortUrl, originalUrl, createdAt }`              |
+| `GET /:shortCode`            | –                                            | –                                        | `301 Location: <originalUrl>` · `404` unknown / malformed          |
+| `GET /health`                | –                                            | –                                        | `200 { status: "ok" }` (liveness)                                  |
+| `GET /health/ready`          | –                                            | –                                        | `200 { status, database, redis }` · `503` if a dependency is down  |
+| `GET /metrics`               | –                                            | –                                        | `200` Prometheus text exposition                                   |
+| `GET /api/v1`                | –                                            | –                                        | `200 { name, version }`                                            |
+
+The submitted URL is normalised (`new URL().href`) before it is stored, so
+`  HTTPS://Example.COM/A B  ` persists as `https://example.com/A%20B`. Duplicate URLs always get a
+fresh short code — there is no uniqueness on `originalUrl`.
+
+### Example
+
+```bash
+# register -> capture the access token
+TOKEN=$(curl -sX POST localhost:3500/api/v1/auth/register \
+  -H 'content-type: application/json' \
+  -d '{"email":"a@b.com","password":"password123"}' | jq -r .accessToken)
+
+# create
+curl -sX POST localhost:3500/api/v1/urls \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"url":"https://example.com/some/long/path"}'
+# { "shortCode":"aB3xK9p", "shortUrl":"http://localhost:3500/aB3xK9p", ... }
+
+# resolve (1st = Cache Miss, 2nd = Cache Hit; both 301)
+curl -si localhost:3500/aB3xK9p | head -1
+```
+
+---
+
+## Configuration
+
+All keys are validated at boot by `src/config/env.validation.ts`; an invalid `.env` fails fast.
+
+| Key                                            | Default                   | Purpose                                        |
+| ---------------------------------------------- | ------------------------- | ---------------------------------------------- |
+| `NODE_ENV`                                     | `development`             | `development` \| `production` \| `test`        |
+| `PORT`                                         | `3000`                    | HTTP listen port (`.env` ships `3500`)         |
+| `API_PREFIX`                                   | `api/v1`                  | Prefix for the JSON API                        |
+| `CORS_ORIGIN`                                  | –                         | Comma-separated allow-list (`*` = reflect any) |
+| `COOKIE_SECRET`                                | –                         | Optional `@fastify/cookie` signing secret      |
+| `DATABASE_URL`                                 | –                         | Postgres connection string (required)          |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / –  | Redis connection                               |
+| `REDIS_KEY_PREFIX`                             | `shorturl:`               | Prefix on every Redis key                      |
+| `LOG_LEVEL`                                    | `debug` dev / `info` prod | pino level                                     |
+| `SLOW_QUERY_THRESHOLD_MS`                      | `200`                     | Prisma queries at/above this are `warn`-logged |
+| `SHORT_URL_BASE`                               | `http://localhost:$PORT`  | Base used to build the returned `shortUrl`     |
+| `SHORT_CODE_LENGTH`                            | `7`                       | base62 code length                             |
+| `SHORT_CODE_MAX_RETRIES`                       | `5`                       | Collision retries before `503`                 |
+| `CACHE_TTL_SECONDS`                            | `3600`                    | Positive cache TTL                             |
+| `CACHE_NEGATIVE_TTL_SECONDS`                   | `60`                      | Negative (unknown-code) cache TTL              |
+| `CACHE_LOCK_TTL_MS`                            | `3000`                    | `SET NX` stampede-lock TTL                     |
+| `CLICKS_FLUSH_INTERVAL_MS`                     | `5000`                    | Click-buffer flush cadence                     |
+| `THROTTLE_TTL` / `THROTTLE_LIMIT`              | `60000` / `100`           | Global per-IP rate limit (ms / requests)       |
+| `JWT_SECRET`                                   | –                         | ≥ 16 chars, signs both token types (required)  |
+| `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN`    | `15m` / `7d`              | Token lifetimes                                |
+
+---
+
+## Observability
+
+- **`GET /health`** — process liveness, always `200 { status: "ok" }`.
+- **`GET /health/ready`** — races `SELECT 1` and `redis.ping()` behind a 1 s timeout;
+  `503 { status: "degraded", database, redis }` if either is down.
+- **`GET /metrics`** — Prometheus counters (`text/plain; version=0.0.4`, `Cache-Control: no-store`):
+
+  | Metric                      | Meaning                                                      |
+  | --------------------------- | ------------------------------------------------------------ |
+  | `cache_hits_total`          | resolutions served from Redis (incl. negative-sentinel hits) |
+  | `cache_misses_total`        | resolutions that fell through to Postgres                    |
+  | `urls_created_total`        | successful `POST /api/v1/urls`                               |
+  | `http_redirects_total`      | successful `301` responses                                   |
+  | `clicks_flushed_total`      | buffered clicks reconciled into Postgres                     |
+  | `clicks_flush_errors_total` | flush cycles that failed and were re-buffered                |
+  | `process_uptime_seconds`    | gauge, seconds since the registry was created                |
+
+- **Logs** — every request logs `method`, `url`, `remoteAddress`, `responseTime`, and `userId`
+  (when authenticated). `authorization` / `cookie` headers and `password` / `token` fields are
+  redacted. `Cache Hit` / `Cache Miss` are emitted at `debug`.
+
+### Rate limiting
+
+A global `ThrottlerGuard` applies `THROTTLE_LIMIT` requests per `THROTTLE_TTL` per IP. The redirect
+hot path and the ops endpoints are exempt (`@SkipThrottle()`); `register` / `login` / `refresh`
+tighten to a fixed **10 requests / 60 s**. Storage is in-memory (per-instance) — swap in the Redis
+storage provider if you run more than one replica.
+
+---
+
+## Load testing
+
+The harness lives in [`scripts/`](./scripts) and drives the app with
+[`autocannon`](https://github.com/mcollina/autocannon).
+
+### 1. Seed a dataset
+
+```bash
+pnpm loadtest:seed                 # 10 000 URLs owned by loadtest@short-url.local
+pnpm loadtest:seed -- --count 50000
+pnpm loadtest:seed -- --reset      # wipe the load-test rows first, then reseed
+```
+
+`seed-loadtest.ts` bulk-inserts rows directly through Prisma (chunked `createMany`) and writes the
+short codes to `scripts/.loadtest-codes.txt` (git-ignored). It is idempotent: it only tops up to the
+requested count unless `--reset` is passed.
+
+### 2. Run the benchmark
+
+Start the app first (`pnpm start:prod` is closest to production). Then:
+
+```bash
+pnpm loadtest                                   # both scenarios, 50 conns, 20 s each
+pnpm loadtest -- --scenario read --duration 30 --connections 100
+pnpm loadtest -- --scenario mixed --json        # write raw results to loadtest-results/
+```
+
+| Flag            | Default                                                              | Meaning                                                                         |
+| --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `--scenario`    | `all`                                                                | `read` \| `mixed` \| `all`                                                      |
+| `--duration`    | `20`                                                                 | seconds per scenario                                                            |
+| `--connections` | `50`                                                                 | concurrent connections                                                          |
+| `--pipelining`  | `1`                                                                  | pipelined requests per connection (read scenario only)                          |
+| `--url`         | `$LOADTEST_TARGET_URL` → `$SHORT_URL_BASE` → `http://localhost:3500` | target base URL                                                                 |
+| `--json`        | off                                                                  | dump each `autocannon` result to `loadtest-results/<timestamp>-<scenario>.json` |
+| `--verbose`     | off                                                                  | also print `autocannon`'s own results table                                     |
+
+**Scenarios**
+
+- **`read`** — 100 % `GET /:shortCode` against random seeded codes. Every response is a `301`
+  (autocannon does not follow redirects, so they show up as `3xx` / `non-2xx` — that is expected and
+  counts as success).
+- **`mixed`** — 9 : 1 `GET /:shortCode` to `POST /api/v1/urls`. The runner logs in as the seeded
+  load-test user to get a token; each write sends a unique URL.
+
+> **Write-path throttling.** `POST /api/v1/urls` is subject to the global rate limit. For a
+> meaningful `mixed` run, start the app with a raised ceiling, e.g.
+> `THROTTLE_LIMIT=1000000 pnpm start:prod`. The runner flags a scenario `FAIL` and explains why if it
+> sees `4xx` responses.
+
+### 3. Interpreting the output
+
+Each scenario prints request rate, latency percentiles (p50 / p90 / p99 / p99.9 / max), throughput,
+a status-code breakdown, and a `PASS` / `FAIL` verdict (fails on connection errors, timeouts, `5xx`,
+or unexpected `4xx`). The process exits non-zero if any scenario fails.
+
+**Indicative local numbers** (single instance, `THROTTLE_LIMIT` raised, 10 000 seeded codes,
+50 connections × 20 s — your hardware will differ):
+
+| Scenario                       | req/s   | p50  | p99   | p99.9 | errors |
+| ------------------------------ | ------- | ---- | ----- | ----- | ------ |
+| `read` (GET → 301)             | ~10 200 | 3 ms | 15 ms | 24 ms | 0      |
+| `mixed` (90 % GET / 10 % POST) | ~6 300  | 7 ms | 15 ms | 20 ms | 0      |
+
+During that run `cache_misses_total` settled at ~10 000 (one cold miss per seeded code, everything
+else from Redis) and `clicks_flushed_total` reconciled to `http_redirects_total` in Postgres with
+`clicks_flush_errors_total = 0`.
+
+### 4. Clean up
+
+```bash
+pnpm loadtest:seed -- --reset --count 1     # drop the load-test rows
+```
+
+---
+
+## Scripts
+
+| Script                                  | Description                                              |
+| --------------------------------------- | -------------------------------------------------------- |
+| `pnpm start:dev` / `start:prod`         | run in watch mode / from compiled `dist/`                |
+| `pnpm build`                            | `nest build` → `dist/src` + `dist/prisma/generated`      |
+| `pnpm typecheck`                        | `tsc --noEmit`                                           |
+| `pnpm lint` / `lint:ci`                 | ESLint (type-checked flat config) with / without `--fix` |
+| `pnpm format`                           | Prettier over `src`, `scripts`, `prisma`                 |
+| `pnpm prisma:migrate` / `prisma:deploy` | `prisma migrate dev` / `deploy`                          |
+| `pnpm db:seed`                          | demo user + demo URLs                                    |
+| `pnpm loadtest:seed`                    | populate the load-test dataset                           |
+| `pnpm loadtest`                         | run the autocannon benchmark                             |
+
+---
+
+## Project layout
+
+```
+src/
+  main.ts                    Fastify bootstrap (trustProxy, cookie, global prefix + excludes, Zod pipe)
+  app.module.ts              config + logger + throttler + feature modules
+  config/                    registerAs factories + zod env validation
+  common/logging/            pino config (redaction, request serializers, userId custom prop)
+  common/types/http.d.ts     FastifyRequest / IncomingMessage `user` augmentation
+  database/                  PrismaService (pg adapter, slow-query event log) + @Global module
+  redis/                     tuned ioredis client + @Global module + InjectRedis()
+  modules/
+    urls/                    create + resolve, short-code CSPRNG, click buffer, redirect controller
+    auth/                    bcrypt, JWT issue/verify, guard, @CurrentUser, cookie handling
+    health/                  liveness + readiness
+    metrics/                 in-memory counters + Prometheus endpoint
+prisma/
+  schema.prisma              Url + User models
+  migrations/                prisma migrate history
+  seed.ts                    demo data
+scripts/
+  loadtest.shared.ts         fixtures shared by the two harness scripts
+  seed-loadtest.ts           bulk-insert N URLs, dump codes to .loadtest-codes.txt
+  load-test.ts               autocannon read-heavy + mixed scenarios
+```
+
+---
+
+## License
+
+MIT © Anton Holubeu
