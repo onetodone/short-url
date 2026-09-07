@@ -17,7 +17,7 @@ permissions:
 env:
   # Node 24 is the current LTS. @types/node tracks a newer line, but the build is
   # a plain tsc transpile so the runtime only needs to be recent enough for the app.
-  NODE_VERSION: "24"
+  NODE_VERSION: '24'
 
 jobs:
   quality:
@@ -25,11 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -83,18 +83,18 @@ jobs:
     # are required — every other key has a default in src/config/*.
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/short_url?schema=public
-      CORS_ORIGIN: "*"
+      CORS_ORIGIN: '*'
       JWT_SECRET: ci-smoke-secret-only-not-for-production
       REDIS_HOST: localhost
-      REDIS_PORT: "6379"
-      REDIS_KEY_PREFIX: "shorturl-ci:"
+      REDIS_PORT: '6379'
+      REDIS_KEY_PREFIX: 'shorturl-ci:'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -120,11 +120,11 @@ jobs:
       - name: Boot app and run smoke test
         env:
           NODE_ENV: production
-          PORT: "3000"
+          PORT: '3000'
           # info keeps the per-request completion logs — useful when a smoke check fails.
           LOG_LEVEL: info
           BASE_URL: http://localhost:3000
-          SMOKE_BOOT_TIMEOUT_MS: "60000"
+          SMOKE_BOOT_TIMEOUT_MS: '60000'
         run: |
           node dist/src/main > "$RUNNER_TEMP/app.log" 2>&1 &
           app_pid=$!
