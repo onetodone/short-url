@@ -78,8 +78,8 @@ endpoints (`/health`, `/health/ready`, `/metrics`).
 | `GET /api/v1/auth/me`        | Bearer access token                          | –                                        | `200 { id, email, createdAt }`                                     |
 | `POST /api/v1/urls`          | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars) | `201 { shortCode, shortUrl, originalUrl, createdAt, updatedAt }`   |
 | `GET /api/v1/urls`           | Bearer access token                          | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first |
-| `PATCH /api/v1/urls/:shortCode` | Bearer access token (**owner only**)      | `{ url }` (only the destination is mutable) | `200 { shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }` · `403` not owner · `404` unknown |
-| `DELETE /api/v1/urls/:shortCode` | Bearer access token (**owner only**)     | –                                        | `204` · `403` not owner · `404` unknown                            |
+| `PATCH /api/v1/urls/:shortCode` | Bearer access token (**owner only**)      | `{ url }` (only the destination is mutable) | `200 { shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }` · `404` unknown **or** not owner |
+| `DELETE /api/v1/urls/:shortCode` | Bearer access token (**owner only**)     | –                                        | `204` · `404` unknown **or** not owner                             |
 | `GET /:shortCode`            | –                                            | –                                        | `301 Location: <originalUrl>` · `404` unknown / malformed          |
 | `GET /health`                | –                                            | –                                        | `200 { status: "ok" }` (liveness)                                  |
 | `GET /health/ready`          | –                                            | –                                        | `200 { status, database, redis }` · `503` if a dependency is down  |
@@ -95,16 +95,18 @@ fresh short code — there is no uniqueness on `originalUrl`.
 count (for paging); `clicks` is the value last flushed from the Redis buffer, so it can trail the
 live count by up to `CLICKS_FLUSH_INTERVAL_MS`.
 
-`PATCH` and `DELETE` act on a single short code and require the caller to own it — a code owned by
-someone else returns `403`, an unknown code `404`. `PATCH` changes **only** the destination URL (it
+`PATCH` and `DELETE` act on a single short code and require the caller to own it. A code that the
+caller does not own is indistinguishable from one that does not exist — both return `404`, so the
+API never confirms that a code is registered to another account. `PATCH` changes **only** the destination URL (it
 is re-normalised the same way as on create) and bumps `updatedAt`. Both operations keep Redis
 consistent: the cached destination is evicted on either, and `DELETE` also drops the code's pending
 click buffer so a later flush cannot revive a deleted row.
 
 ### Routing
 
-The JSON API controllers each carry `API_PREFIX` (`main.ts` preloads `.env` via `@/common/load-env`
-so the prefix is known before the `@Controller()` decorators evaluate). The redirect and the ops
+The JSON API controllers each carry `API_PREFIX`, resolved from the `src/config/env.ts` helper
+(which loads `.env` on import) so the prefix is known before the `@Controller()` decorators
+evaluate. The redirect and the ops
 endpoints are mounted at the root. A single global prefix is not used: it can only keep the bare
 `GET /:shortCode` redirect at the root by `exclude`-ing the `:shortCode` pattern, which also strips
 the prefix from every other single-segment route (e.g. `GET /api/v1/urls`).
@@ -131,7 +133,9 @@ curl -si localhost:3000/aB3xK9p | head -1
 
 ## Configuration
 
-All keys are validated at boot by `src/config/env.validation.ts`; an invalid `.env` fails fast.
+Every variable is parsed, coerced, and defaulted in one place — `src/config/env.ts`. Nothing else
+in `src/` reads `process.env`; the `registerAs` factories and the module-load helpers all consume
+the `env` object it exports. An invalid `.env` fails fast at startup.
 
 | Key                                            | Default                   | Purpose                                        |
 | ---------------------------------------------- | ------------------------- | ---------------------------------------------- |
@@ -300,8 +304,8 @@ request, and on demand (`workflow_dispatch`):
 src/
   main.ts                    Fastify bootstrap (trustProxy, cookie, global prefix + excludes, Zod pipe)
   app.module.ts              config + logger + throttler + feature modules
-  config/                    registerAs factories + zod env validation
-  common/load-env.ts         side-effect `.env` load, imported first by main.ts
+  config/                    env.ts (single zod-validated env helper) + registerAs factories over it
+  common/load-env.ts         side-effect `.env` load, imported first by main.ts and by config/env.ts
   common/api-prefix.ts       API_PREFIX constant shared by the JSON API controllers
   common/logging/            pino config (redaction, request serializers, userId custom prop)
   common/types/http.d.ts     FastifyRequest / IncomingMessage `user` augmentation
