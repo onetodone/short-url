@@ -1,8 +1,9 @@
-# Short URL
+# Short URL API
 
-A high-performance URL shortener built for the read path. Redirects are served from a Redis
-cache-aside layer with stampede protection, click analytics are buffered in Redis and flushed to
-Postgres in batches, and the `301` response never waits on a database write.
+The backend HTTP service (`@onetodone/short-url-api`) for a high-performance URL shortener, built for
+the read path. Redirects are served from a Redis cache-aside layer with stampede protection, click
+analytics are buffered in Redis and flushed to Postgres in batches, and the `301` response never
+waits on a database write.
 
 - **Framework:** NestJS 12 on the **Fastify** adapter
 - **Storage:** PostgreSQL via Prisma 7 (`prisma-client` generator, `pg` driver adapter)

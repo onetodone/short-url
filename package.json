@@ -1,7 +1,7 @@
 {
-  "name": "@onetodone/short-url",
+  "name": "@onetodone/short-url-api",
   "version": "1.0.0",
-  "description": "High-performance URL shortener (NestJS + Fastify + Prisma + Redis)",
+  "description": "High-performance URL shortener API (NestJS + Fastify + Prisma + Redis)",
   "private": true,
   "author": "Anton Holubeu (https://github.com/aholu)",
   "license": "MIT",

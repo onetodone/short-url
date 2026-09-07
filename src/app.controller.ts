@@ -6,6 +6,6 @@ import { SkipThrottle } from '@nestjs/throttler'
 export class AppController {
   @Get()
   info(): { name: string; version: string } {
-    return { name: 'short-url', version: process.env.npm_package_version ?? '0.0.0' }
+    return { name: 'short-url-api', version: process.env.npm_package_version ?? '0.0.0' }
   }
 }
