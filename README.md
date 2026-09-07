@@ -1,5 +1,16 @@
 # Short URL API
 
+[![CI Status](https://github.com/onetodone/short-url-api/actions/workflows/ci.yml/badge.svg)](https://github.com/onetodone/short-url-api/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](./package.json)
+[![pnpm](https://img.shields.io/badge/pnpm-v12-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
+[![NestJS](https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![Fastify](https://img.shields.io/badge/Fastify-000000?logo=fastify&logoColor=white)](https://fastify.dev/)
+[![Prisma](https://img.shields.io/badge/Prisma-2D3748?logo=prisma&logoColor=white)](https://www.prisma.io/)
+[![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![PostgreSQL](https://img.shields.io/badge/Postgres-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
 The backend HTTP service (`@onetodone/short-url-api`) for a high-performance URL shortener, built for
 the read path. Redirects are served from a Redis cache-aside layer with stampede protection, click
 analytics are buffered in Redis and flushed to Postgres in batches, and the `301` response never
@@ -70,21 +81,21 @@ The service listens on `PORT` (`3000` if unset in `.env`) on `0.0.0.0`.
 `API_PREFIX` (default `api/v1`) applies to every route **except** the public redirect and the ops
 endpoints (`/health`, `/health/ready`, `/metrics`).
 
-| Method & path                | Auth                                         | Body                                     | Result                                                             |
-| ---------------------------- | -------------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------ |
-| `POST /api/v1/auth/register` | –                                            | `{ email, password }` (password 8–128)   | `201 { user, accessToken, refreshToken }` + `refresh_token` cookie |
-| `POST /api/v1/auth/login`    | –                                            | `{ email, password }`                    | `200 { user, accessToken, refreshToken }` + cookie                 |
-| `POST /api/v1/auth/refresh`  | refresh token (cookie or `{ refreshToken }`) | –                                        | `200` rotated token pair                                           |
-| `GET /api/v1/auth/me`        | Bearer access token                          | –                                        | `200 { id, email, createdAt }`                                     |
-| `POST /api/v1/urls`          | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars) | `201 { shortCode, shortUrl, originalUrl, createdAt, updatedAt }`   |
-| `GET /api/v1/urls`           | Bearer access token                          | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first |
-| `PATCH /api/v1/urls/:shortCode` | Bearer access token (**owner only**)      | `{ url }` (only the destination is mutable) | `200 { shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }` · `404` unknown **or** not owner |
-| `DELETE /api/v1/urls/:shortCode` | Bearer access token (**owner only**)     | –                                        | `204` · `404` unknown **or** not owner                             |
-| `GET /:shortCode`            | –                                            | –                                        | `301 Location: <originalUrl>` · `404` unknown / malformed          |
-| `GET /health`                | –                                            | –                                        | `200 { status: "ok" }` (liveness)                                  |
-| `GET /health/ready`          | –                                            | –                                        | `200 { status, database, redis }` · `503` if a dependency is down  |
-| `GET /metrics`               | –                                            | –                                        | `200` Prometheus text exposition                                   |
-| `GET /api/v1`                | –                                            | –                                        | `200 { name, version }`                                            |
+| Method & path                    | Auth                                         | Body                                               | Result                                                                                                    |
+| -------------------------------- | -------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/auth/register`     | –                                            | `{ email, password }` (password 8–128)             | `201 { user, accessToken, refreshToken }` + `refresh_token` cookie                                        |
+| `POST /api/v1/auth/login`        | –                                            | `{ email, password }`                              | `200 { user, accessToken, refreshToken }` + cookie                                                        |
+| `POST /api/v1/auth/refresh`      | refresh token (cookie or `{ refreshToken }`) | –                                                  | `200` rotated token pair                                                                                  |
+| `GET /api/v1/auth/me`            | Bearer access token                          | –                                                  | `200 { id, email, createdAt }`                                                                            |
+| `POST /api/v1/urls`              | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars)           | `201 { shortCode, shortUrl, originalUrl, createdAt, updatedAt }`                                          |
+| `GET /api/v1/urls`               | Bearer access token                          | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first                                     |
+| `PATCH /api/v1/urls/:shortCode`  | Bearer access token (**owner only**)         | `{ url }` (only the destination is mutable)        | `200 { shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }` · `404` unknown **or** not owner |
+| `DELETE /api/v1/urls/:shortCode` | Bearer access token (**owner only**)         | –                                                  | `204` · `404` unknown **or** not owner                                                                    |
+| `GET /:shortCode`                | –                                            | –                                                  | `301 Location: <originalUrl>` · `404` unknown / malformed                                                 |
+| `GET /health`                    | –                                            | –                                                  | `200 { status: "ok" }` (liveness)                                                                         |
+| `GET /health/ready`              | –                                            | –                                                  | `200 { status, database, redis }` · `503` if a dependency is down                                         |
+| `GET /metrics`                   | –                                            | –                                                  | `200` Prometheus text exposition                                                                          |
+| `GET /api/v1`                    | –                                            | –                                                  | `200 { name, version }`                                                                                   |
 
 The submitted URL is normalised (`new URL().href`) before it is stored, so
 `  HTTPS://Example.COM/A B  ` persists as `https://example.com/A%20B`. Duplicate URLs always get a
@@ -140,7 +151,7 @@ the `env` object it exports. An invalid `.env` fails fast at startup.
 | Key                                            | Default                   | Purpose                                        |
 | ---------------------------------------------- | ------------------------- | ---------------------------------------------- |
 | `NODE_ENV`                                     | `development`             | `development` \| `production` \| `test`        |
-| `PORT`                                         | `3000`                    | HTTP listen port         |
+| `PORT`                                         | `3000`                    | HTTP listen port                               |
 | `API_PREFIX`                                   | `api/v1`                  | Prefix for the JSON API                        |
 | `CORS_ORIGIN`                                  | –                         | Comma-separated allow-list (`*` = reflect any) |
 | `COOKIE_SECRET`                                | –                         | Optional `@fastify/cookie` signing secret      |
