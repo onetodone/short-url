@@ -15,6 +15,6 @@ export class AppController {
 
   @Get()
   info(): { name: string; version: string } {
-    return { name: 'short-url-api', version: this.version }
+    return { name: 'short-link-api', version: this.version }
   }
 }

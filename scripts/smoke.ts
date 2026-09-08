@@ -83,7 +83,7 @@ async function main(): Promise<void> {
 
   // Register a throwaway account and capture an access token.
   const credentials = {
-    email: `smoke+${Date.now()}@short-url.test`,
+    email: `smoke+${Date.now()}@short-link.test`,
     password: 'smoke-test-password-123',
   }
   const registerRes = await fetch(apiUrl('auth/register'), {
@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     assert(res.status === 401, `POST /${API_PREFIX}/urls without a token -> 401 (got ${res.status})`)
   }
 
-  // Create a short URL.
+  // Create a short Link.
   const target = `https://example.com/smoke/${Math.random().toString(36).slice(2)}`
   const createRes = await fetch(apiUrl('urls'), {
     method: 'POST',

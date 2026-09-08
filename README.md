@@ -1,6 +1,6 @@
-# Short URL API
+# Short Link API
 
-[![CI Status](https://github.com/onetodone/short-url-api/actions/workflows/ci.yml/badge.svg)](https://github.com/onetodone/short-url-api/actions/workflows/ci.yml)
+[![CI Status](https://github.com/onetodone/short-link-api/actions/workflows/ci.yml/badge.svg)](https://github.com/onetodone/short-link-api/actions/workflows/ci.yml)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](./package.json)
 [![pnpm](https://img.shields.io/badge/pnpm-v12-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
@@ -11,7 +11,7 @@
 [![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)](https://redis.io/)
 [![PostgreSQL](https://img.shields.io/badge/Postgres-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 
-The backend HTTP service (`@onetodone/short-url-api`) for a high-performance URL shortener, built for
+The backend HTTP service (`@onetodone/short-link-api`) for a high-performance URL shortener, built for
 the read path. Redirects are served from a Redis cache-aside layer with stampede protection, click
 analytics are buffered in Redis and flushed to Postgres in batches, and the `301` response never
 waits on a database write.
@@ -40,7 +40,7 @@ POST /api/v1/urls                       GET /:shortCode
                                            ClicksService.increment(code)   (fire-and-forget)
                                          -> 301 Location: <originalUrl>
 
-ClicksService: INCR shorturl:clicks:{code} + SADD shorturl:clicks:dirty
+ClicksService: INCR shortlink:clicks:{code} + SADD shortlink:clicks:dirty
                setInterval(flush): GETDEL each dirty code -> one prisma.$transaction of updateMany
 ```
 
@@ -61,7 +61,7 @@ ClicksService: INCR shorturl:clicks:{code} + SADD shorturl:clicks:dirty
 pnpm install                         # also runs `prisma generate` (postinstall)
 cp .env.example .env                 # then edit DATABASE_URL / JWT_SECRET / ports
 pnpm prisma:migrate                  # apply migrations
-pnpm db:seed                         # optional: 1 demo user + 4 demo short URLs
+pnpm db:seed                         # optional: 1 demo user + 4 demo short Links
 ```
 
 ### Run
@@ -81,23 +81,23 @@ The service listens on `PORT` (`3000` if unset in `.env`) on `0.0.0.0`.
 `API_PREFIX` (default `api/v1`) applies to every route **except** the public redirect and the ops
 endpoints (`/health`, `/health/ready`, `/metrics`).
 
-| Method & path                    | Auth                                         | Body                                               | Result                                                                                                    |
-| -------------------------------- | -------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/auth/register`     | –                                            | `{ email, password }` (password 8–128)             | `201 { user, accessToken }` + `refresh_token` cookie                                                      |
-| `POST /api/v1/auth/login`        | –                                            | `{ email, password }`                              | `200 { user, accessToken }` + `refresh_token` cookie                                                      |
-| `POST /api/v1/auth/refresh`      | `refresh_token` cookie                       | –                                                  | `200 { user, accessToken }` + rotated `refresh_token` cookie                                              |
-| `POST /api/v1/auth/logout`       | Bearer access token                          | –                                                  | `204` — revokes this session · clears the cookie                                                          |
-| `POST /api/v1/auth/logout-all`   | Bearer access token                          | –                                                  | `204` — revokes every session the caller owns                                                             |
-| `GET /api/v1/auth/me`            | Bearer access token                          | –                                                  | `200 { id, email, createdAt }`                                                                            |
-| `POST /api/v1/urls`              | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars)           | `201 { shortCode, shortUrl, originalUrl, createdAt, updatedAt }`                                          |
-| `GET /api/v1/urls`               | Bearer access token                          | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first                                     |
-| `PATCH /api/v1/urls/:shortCode`  | Bearer access token (**owner only**)         | `{ url }` (only the destination is mutable)        | `200 { shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }` · `404` unknown **or** not owner |
-| `DELETE /api/v1/urls/:shortCode` | Bearer access token (**owner only**)         | –                                                  | `204` · `404` unknown **or** not owner                                                                    |
-| `GET /:shortCode`                | –                                            | –                                                  | `301 Location: <originalUrl>` · `404` unknown / malformed                                                 |
-| `GET /health`                    | –                                            | –                                                  | `200 { status: "ok" }` (liveness)                                                                         |
-| `GET /health/ready`              | –                                            | –                                                  | `200 { status, database, redis }` · `503` if a dependency is down                                         |
-| `GET /metrics`                   | –                                            | –                                                  | `200` Prometheus text exposition                                                                          |
-| `GET /api/v1`                    | –                                            | –                                                  | `200 { name, version }`                                                                                   |
+| Method & path                    | Auth                                 | Body                                               | Result                                                                                                    |
+| -------------------------------- | ------------------------------------ | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `POST /api/v1/auth/register`     | –                                    | `{ email, password }` (password 8–128)             | `201 { user, accessToken }` + `refresh_token` cookie                                                      |
+| `POST /api/v1/auth/login`        | –                                    | `{ email, password }`                              | `200 { user, accessToken }` + `refresh_token` cookie                                                      |
+| `POST /api/v1/auth/refresh`      | `refresh_token` cookie               | –                                                  | `200 { user, accessToken }` + rotated `refresh_token` cookie                                              |
+| `POST /api/v1/auth/logout`       | Bearer access token                  | –                                                  | `204` — revokes this session · clears the cookie                                                          |
+| `POST /api/v1/auth/logout-all`   | Bearer access token                  | –                                                  | `204` — revokes every session the caller owns                                                             |
+| `GET /api/v1/auth/me`            | Bearer access token                  | –                                                  | `200 { id, email, createdAt }`                                                                            |
+| `POST /api/v1/urls`              | Bearer access token                  | `{ url }` (`http`/`https`, ≤ 2048 chars)           | `201 { shortCode, shortUrl, originalUrl, createdAt, updatedAt }`                                          |
+| `GET /api/v1/urls`               | Bearer access token                  | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first                                     |
+| `PATCH /api/v1/urls/:shortCode`  | Bearer access token (**owner only**) | `{ url }` (only the destination is mutable)        | `200 { shortCode, shortUrl, originalUrl, clicks, createdAt, updatedAt }` · `404` unknown **or** not owner |
+| `DELETE /api/v1/urls/:shortCode` | Bearer access token (**owner only**) | –                                                  | `204` · `404` unknown **or** not owner                                                                    |
+| `GET /:shortCode`                | –                                    | –                                                  | `301 Location: <originalUrl>` · `404` unknown / malformed                                                 |
+| `GET /health`                    | –                                    | –                                                  | `200 { status: "ok" }` (liveness)                                                                         |
+| `GET /health/ready`              | –                                    | –                                                  | `200 { status, database, redis }` · `503` if a dependency is down                                         |
+| `GET /metrics`                   | –                                    | –                                                  | `200` Prometheus text exposition                                                                          |
+| `GET /api/v1`                    | –                                    | –                                                  | `200 { name, version }`                                                                                   |
 
 ### Sessions & token rotation
 
@@ -175,7 +175,7 @@ the `env` object it exports. An invalid `.env` fails fast at startup.
 | `COOKIE_SECRET`                                | –                         | Optional `@fastify/cookie` signing secret      |
 | `DATABASE_URL`                                 | –                         | Postgres connection string (required)          |
 | `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` | `localhost` / `6379` / –  | Redis connection                               |
-| `REDIS_KEY_PREFIX`                             | `shorturl:`               | Prefix on every Redis key                      |
+| `REDIS_KEY_PREFIX`                             | `shortlink:`              | Prefix on every Redis key                      |
 | `REDIS_TLS`                                    | `false`                   | `true` for TLS-only providers (e.g. Upstash)   |
 | `LOG_LEVEL`                                    | `debug` dev / `info` prod | pino level                                     |
 | `SLOW_QUERY_THRESHOLD_MS`                      | `200`                     | Prisma queries at/above this are `warn`-logged |
@@ -231,7 +231,7 @@ The harness lives in [`scripts/`](./scripts) and drives the app with
 ### 1. Seed a dataset
 
 ```bash
-pnpm loadtest:seed                 # 10 000 URLs owned by loadtest@short-url.local
+pnpm loadtest:seed                 # 10 000 URLs owned by loadtest@short-link.local
 pnpm loadtest:seed -- --count 50000
 pnpm loadtest:seed -- --reset      # wipe the load-test rows first, then reseed
 ```
