@@ -15,12 +15,15 @@ import { Throttle } from '@nestjs/throttler'
 import type { FastifyReply, FastifyRequest } from 'fastify'
 
 import { API_PREFIX } from '@/common/api-prefix'
+import { parseDurationSeconds } from '@/common/duration.util'
 import { AuthService } from '@/modules/auth/auth.service'
-import type { AuthResponse, AuthResult } from '@/modules/auth/auth.types'
+import type { AuthResponse, AuthResult, RequestContext } from '@/modules/auth/auth.types'
 import { CurrentUser } from '@/modules/auth/current-user.decorator'
 import { LoginDto } from '@/modules/auth/dto/login.dto'
 import { RegisterDto } from '@/modules/auth/dto/register.dto'
 import { JwtAuthGuard } from '@/modules/auth/jwt-auth.guard'
+import { UserAgent } from '@/modules/auth/user-agent.decorator'
+import { UserIp } from '@/modules/auth/user-ip.decorator'
 
 const REFRESH_COOKIE = 'refresh_token'
 const DEFAULT_REFRESH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
@@ -47,16 +50,26 @@ export class AuthController {
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @Throttle(AUTH_THROTTLE)
-  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) reply: FastifyReply): Promise<AuthResponse> {
-    const result = await this.auth.register(dto.email, dto.password)
+  async register(
+    @Body() dto: RegisterDto,
+    @UserIp() ip: string | undefined,
+    @UserAgent() userAgent: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<AuthResponse> {
+    const result = await this.auth.register(dto.email, dto.password, { ip, userAgent })
     return this.finish(reply, result)
   }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @Throttle(AUTH_THROTTLE)
-  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) reply: FastifyReply): Promise<AuthResponse> {
-    const result = await this.auth.login(dto.email, dto.password)
+  async login(
+    @Body() dto: LoginDto,
+    @UserIp() ip: string | undefined,
+    @UserAgent() userAgent: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<AuthResponse> {
+    const result = await this.auth.login(dto.email, dto.password, { ip, userAgent })
     return this.finish(reply, result)
   }
 
@@ -65,15 +78,39 @@ export class AuthController {
   @Throttle(AUTH_THROTTLE)
   async refresh(
     @Req() request: FastifyRequest,
+    @UserIp() ip: string | undefined,
+    @UserAgent() userAgent: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ): Promise<AuthResponse> {
-    const token = this.extractRefreshToken(request)
+    const token = request.cookies?.[REFRESH_COOKIE]
     if (!token) {
       throw new UnauthorizedException('Missing refresh token')
     }
 
-    const result = await this.auth.refresh(token)
+    const ctx: RequestContext = { ip, userAgent }
+    const result = await this.auth.refresh(token, ctx)
     return this.finish(reply, result)
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle(AUTH_THROTTLE)
+  @UseGuards(JwtAuthGuard)
+  async logout(
+    @CurrentUser('sessionId') sessionId: string,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ): Promise<void> {
+    await this.auth.logout(sessionId)
+    reply.clearCookie(REFRESH_COOKIE, { path: this.cookiePath })
+  }
+
+  @Post('logout-all')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Throttle(AUTH_THROTTLE)
+  @UseGuards(JwtAuthGuard)
+  async logoutAll(@CurrentUser('id') userId: string, @Res({ passthrough: true }) reply: FastifyReply): Promise<void> {
+    await this.auth.logoutAll(userId)
+    reply.clearCookie(REFRESH_COOKIE, { path: this.cookiePath })
   }
 
   @Get('me')
@@ -94,29 +131,6 @@ export class AuthController {
     return {
       user: result.user,
       accessToken: result.accessToken,
-      refreshToken: result.refreshToken,
     }
   }
-
-  private extractRefreshToken(request: FastifyRequest): string | null {
-    const fromCookie = request.cookies?.[REFRESH_COOKIE]
-    if (fromCookie) {
-      return fromCookie
-    }
-
-    const body = request.body as { refreshToken?: unknown } | undefined
-    return typeof body?.refreshToken === 'string' && body.refreshToken.length > 0 ? body.refreshToken : null
-  }
-}
-
-function parseDurationSeconds(value: string, fallback: number): number {
-  const match = /^(\d+)\s*(s|m|h|d)?$/.exec(value.trim())
-  if (!match) {
-    return fallback
-  }
-
-  const amount = Number(match[1])
-  const unit = match[2] ?? 's'
-  const multipliers: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86_400 }
-  return amount * multipliers[unit]
 }

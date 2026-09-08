@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
 import { LoggerModule } from 'nestjs-pino'
 
 import { appConfig } from '@/config/app.config'
+import { authConfig } from '@/config/auth.config'
 import { cacheConfig } from '@/config/cache.config'
 import { databaseConfig } from '@/config/database.config'
 import { jwtConfig } from '@/config/jwt.config'
@@ -26,7 +27,7 @@ import { AppController } from '@/app.controller'
       isGlobal: true,
       cache: true,
       validate: validateEnv,
-      load: [appConfig, databaseConfig, redisConfig, jwtConfig, cacheConfig, shortenerConfig],
+      load: [appConfig, authConfig, databaseConfig, redisConfig, jwtConfig, cacheConfig, shortenerConfig],
     }),
     LoggerModule.forRoot(loggerOptions),
     ThrottlerModule.forRootAsync({

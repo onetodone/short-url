@@ -3,6 +3,7 @@ import 'fastify'
 interface AuthPrincipal {
   id: string
   email: string
+  sessionId: string
 }
 
 declare module 'fastify' {

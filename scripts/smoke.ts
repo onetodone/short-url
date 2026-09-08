@@ -3,8 +3,9 @@
  *
  * Assumes the app is already listening on BASE_URL. Walks the critical path:
  * liveness, readiness (Postgres + Redis), register, the guarded create endpoint,
- * the redirect (cache miss then hit), an unknown-code 404, and the Prometheus
- * /metrics counters. Exits non-zero on the first failed check.
+ * the redirect (cache miss then hit), an unknown-code 404, the Prometheus
+ * /metrics counters, and the refresh-session lifecycle (rotate, reject the spent
+ * secret, logout revokes). Exits non-zero on the first failed check.
  *
  *   node dist/src/main &
  *   BASE_URL=http://localhost:3000 pnpm smoke
@@ -35,6 +36,16 @@ function assert(condition: boolean, message: string, detail?: unknown): void {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function readRefreshCookie(res: Response): string | null {
+  for (const raw of res.headers.getSetCookie()) {
+    const match = /^refresh_token=([^;]+)/.exec(raw)
+    if (match && match[1]) {
+      return match[1]
+    }
+  }
+  return null
 }
 
 async function waitForBoot(): Promise<void> {
@@ -80,7 +91,10 @@ async function main(): Promise<void> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(credentials),
   })
-  const registerBody = (await registerRes.json().catch(() => ({}))) as { accessToken?: unknown }
+  const registerBody = (await registerRes.json().catch(() => ({}))) as {
+    accessToken?: unknown
+    refreshToken?: unknown
+  }
   assert(
     registerRes.status === 201,
     `POST /${API_PREFIX}/auth/register -> 201 (got ${registerRes.status})`,
@@ -90,7 +104,10 @@ async function main(): Promise<void> {
     typeof registerBody.accessToken === 'string' && registerBody.accessToken.length > 0,
     'register returned an accessToken',
   )
+  assert(registerBody.refreshToken === undefined, 'register did not leak the refresh token in the body')
   const accessToken = registerBody.accessToken as string
+  const refreshCookie = readRefreshCookie(registerRes)
+  assert(typeof refreshCookie === 'string' && refreshCookie.length > 0, 'register set a refresh_token cookie')
 
   // The create endpoint must reject an anonymous caller.
   {
@@ -144,6 +161,41 @@ async function main(): Promise<void> {
     for (const metric of ['urls_created_total', 'http_redirects_total', 'cache_hits_total', 'cache_misses_total']) {
       assert(text.includes(metric), `/metrics exposes ${metric}`)
     }
+  }
+
+  // Refresh-session lifecycle: rotate in place, reject the spent secret, then
+  // logout revokes the session for good.
+  {
+    const cookie = (value: string) => ({ cookie: `refresh_token=${value}` })
+
+    const rotateRes = await fetch(apiUrl('auth/refresh'), { method: 'POST', headers: cookie(refreshCookie as string) })
+    assert(rotateRes.status === 200, `POST /${API_PREFIX}/auth/refresh (cookie) -> 200 (got ${rotateRes.status})`)
+    const rotatedCookie = readRefreshCookie(rotateRes)
+    assert(
+      typeof rotatedCookie === 'string' && rotatedCookie.length > 0 && rotatedCookie !== refreshCookie,
+      'refresh rotated the refresh_token cookie',
+    )
+
+    const replayRes = await fetch(apiUrl('auth/refresh'), { method: 'POST', headers: cookie(refreshCookie as string) })
+    assert(
+      replayRes.status === 401,
+      `POST /${API_PREFIX}/auth/refresh with the spent cookie -> 401 (got ${replayRes.status})`,
+    )
+
+    const logoutRes = await fetch(apiUrl('auth/logout'), {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    assert(logoutRes.status === 204, `POST /${API_PREFIX}/auth/logout -> 204 (got ${logoutRes.status})`)
+
+    const afterLogoutRes = await fetch(apiUrl('auth/refresh'), {
+      method: 'POST',
+      headers: cookie(rotatedCookie as string),
+    })
+    assert(
+      afterLogoutRes.status === 401,
+      `POST /${API_PREFIX}/auth/refresh after logout -> 401 (got ${afterLogoutRes.status})`,
+    )
   }
 
   console.log(`\nSmoke test passed — ${checks} checks.`)

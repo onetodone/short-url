@@ -3,6 +3,10 @@ export interface AuthUser {
   email: string
 }
 
+export interface AuthPrincipal extends AuthUser {
+  sessionId: string
+}
+
 export interface AuthTokens {
   accessToken: string
   refreshToken: string
@@ -13,18 +17,18 @@ export interface AuthResult extends AuthTokens {
 }
 
 export interface AuthResponse {
-  user: { id: string; email: string }
+  user: AuthUser
   accessToken: string
-  refreshToken: string
+}
+
+export interface RequestContext {
+  ip?: string
+  userAgent?: string
 }
 
 export interface AccessTokenClaims {
   sub: string
   email: string
   type: 'access'
-}
-
-export interface RefreshTokenClaims {
-  sub: string
-  type: 'refresh'
+  sid: string
 }

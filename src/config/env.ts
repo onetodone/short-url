@@ -36,6 +36,8 @@ const envSchema = z.object({
   JWT_EXPIRES_IN: z.string().min(1).default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().min(1).default('7d'),
 
+  SESSION_CLEANUP_INTERVAL_MS: z.coerce.number().int().min(60_000).default(3_600_000),
+
   SHORT_URL_BASE: z.string().url().optional(),
   SHORT_CODE_LENGTH: z.coerce.number().int().min(4).max(32).default(7),
   SHORT_CODE_MAX_RETRIES: z.coerce.number().int().min(1).default(5),

@@ -26,11 +26,16 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired access token')
     }
 
-    if (claims.type !== 'access' || typeof claims.sub !== 'string' || typeof claims.email !== 'string') {
+    if (
+      claims.type !== 'access' ||
+      typeof claims.sub !== 'string' ||
+      typeof claims.email !== 'string' ||
+      typeof claims.sid !== 'string'
+    ) {
       throw new UnauthorizedException('Invalid or expired access token')
     }
 
-    const principal = { id: claims.sub, email: claims.email }
+    const principal = { id: claims.sub, email: claims.email, sessionId: claims.sid }
     request.user = principal
     request.raw.user = principal
     return true
