@@ -87,7 +87,7 @@ jobs:
       JWT_SECRET: ci-smoke-secret-only-not-for-production
       REDIS_HOST: localhost
       REDIS_PORT: '6379'
-      REDIS_KEY_PREFIX: 'shorturl-ci:'
+      REDIS_KEY_PREFIX: 'shortlink-ci:'
 
     steps:
       - uses: actions/checkout@v7

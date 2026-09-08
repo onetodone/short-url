@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
  * Fixtures shared by `scripts/seed-loadtest.ts` (writer) and `scripts/load-test.ts` (reader).
  * The credentials below belong to a throwaway account used only for local load testing.
  */
-export const LOADTEST_USER_EMAIL = 'loadtest@short-url.local'
+export const LOADTEST_USER_EMAIL = 'loadtest@short-link.local'
 export const LOADTEST_USER_PASSWORD = 'loadtest-password-123'
 
 /** Seeder writes it, runner reads it — one short code per line. Git-ignored. */

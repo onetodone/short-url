@@ -1,5 +1,5 @@
 {
-  "name": "@onetodone/short-url-api",
+  "name": "@onetodone/short-link-api",
   "version": "1.0.0",
   "description": "High-performance URL shortener API (NestJS + Fastify + Prisma + Redis)",
   "private": true,

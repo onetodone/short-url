@@ -20,7 +20,7 @@ const envSchema = z.object({
   REDIS_HOST: z.string().min(1).default('localhost'),
   REDIS_PORT: z.coerce.number().int().min(1).default(6379),
   REDIS_PASSWORD: z.string().optional(),
-  REDIS_KEY_PREFIX: z.string().default('shorturl:'),
+  REDIS_KEY_PREFIX: z.string().default('shortlink:'),
   REDIS_TLS: z
     .enum(['true', 'false'])
     .default('false')

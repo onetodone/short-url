@@ -16,7 +16,7 @@ function createRedisClient(config: ConfigService): Redis {
     host,
     port,
     password: config.get<string>('redis.password') || undefined,
-    keyPrefix: config.get<string>('redis.keyPrefix', 'shorturl:'),
+    keyPrefix: config.get<string>('redis.keyPrefix', 'shortlink:'),
     tls: tlsEnabled ? {} : undefined,
     maxRetriesPerRequest: 3,
     enableAutoPipelining: true,
