@@ -16,7 +16,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify'
 
 import { API_PREFIX } from '@/common/api-prefix'
 import { AuthService } from '@/modules/auth/auth.service'
-import type { AuthResult } from '@/modules/auth/auth.types'
+import type { AuthResponse, AuthResult } from '@/modules/auth/auth.types'
 import { CurrentUser } from '@/modules/auth/current-user.decorator'
 import { LoginDto } from '@/modules/auth/dto/login.dto'
 import { RegisterDto } from '@/modules/auth/dto/register.dto'
@@ -25,12 +25,6 @@ import { JwtAuthGuard } from '@/modules/auth/jwt-auth.guard'
 const REFRESH_COOKIE = 'refresh_token'
 const DEFAULT_REFRESH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
 const AUTH_THROTTLE = { default: { limit: 10, ttl: 60_000 } }
-
-interface AuthResponse {
-  user: { id: string; email: string }
-  accessToken: string
-  refreshToken: string
-}
 
 @Controller(`${API_PREFIX}/auth`)
 export class AuthController {

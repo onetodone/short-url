@@ -20,7 +20,8 @@ import { CreateUrlDto } from '@/modules/urls/dto/create-url.dto'
 import { ListUrlsDto } from '@/modules/urls/dto/list-urls.dto'
 import { UpdateUrlDto } from '@/modules/urls/dto/update-url.dto'
 import { SHORT_CODE_PATTERN } from '@/modules/urls/short-code.util'
-import { CreatedUrl, UrlList, UrlsService, UrlSummary } from '@/modules/urls/urls.service'
+import { UrlsService } from '@/modules/urls/urls.service'
+import type { CreatedUrl, UrlList, UrlSummary } from '@/modules/urls/urls.types'
 
 @Controller(`${API_PREFIX}/urls`)
 @UseGuards(JwtAuthGuard)

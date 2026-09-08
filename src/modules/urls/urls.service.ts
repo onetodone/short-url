@@ -6,37 +6,9 @@ import { PrismaService } from '@/database/prisma.service'
 import { MetricsService } from '@/modules/metrics/metrics.service'
 import { InjectRedis } from '@/redis/redis.constants'
 import { ClicksService } from '@/modules/urls/clicks.service'
+import { CreatedUrl, ListUrlsOptions, UrlList, UrlSummary } from '@/modules/urls/urls.types'
 import { generateShortCode } from '@/modules/urls/short-code.util'
 import { Prisma } from '@prisma-client'
-
-export interface CreatedUrl {
-  shortCode: string
-  shortUrl: string
-  originalUrl: string
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface UrlSummary {
-  shortCode: string
-  shortUrl: string
-  originalUrl: string
-  clicks: number
-  createdAt: Date
-  updatedAt: Date
-}
-
-export interface UrlList {
-  items: UrlSummary[]
-  total: number
-  limit: number
-  offset: number
-}
-
-export interface ListUrlsOptions {
-  limit: number
-  offset: number
-}
 
 const NEGATIVE_SENTINEL = 'not-found'
 const LOCK_WAIT_ATTEMPTS = 5

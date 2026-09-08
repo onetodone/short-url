@@ -5,13 +5,7 @@ import { Redis } from 'ioredis'
 import { PrismaService } from '@/database/prisma.service'
 import { InjectRedis } from '@/redis/redis.constants'
 
-type ComponentStatus = 'up' | 'down'
-
-interface ReadinessReport {
-  status: 'ok' | 'degraded'
-  database: ComponentStatus
-  redis: ComponentStatus
-}
+import type { ComponentStatus, ReadinessReport } from '@/modules/health/health.types'
 
 const READINESS_PROBE_TIMEOUT_MS = 1000
 
