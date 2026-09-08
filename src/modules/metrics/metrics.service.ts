@@ -1,17 +1,6 @@
 import { Injectable } from '@nestjs/common'
 
-export type CounterName =
-  | 'cache_hits_total'
-  | 'cache_misses_total'
-  | 'urls_created_total'
-  | 'http_redirects_total'
-  | 'clicks_flushed_total'
-  | 'clicks_flush_errors_total'
-
-interface CounterMeta {
-  name: CounterName
-  help: string
-}
+import type { CounterMeta, CounterName } from '@/modules/metrics/metrics.types'
 
 const COUNTERS: readonly CounterMeta[] = [
   { name: 'cache_hits_total', help: 'Short-code resolutions served from the Redis cache (incl. negative hits)' },

@@ -12,6 +12,12 @@ export interface AuthResult extends AuthTokens {
   user: AuthUser
 }
 
+export interface AuthResponse {
+  user: { id: string; email: string }
+  accessToken: string
+  refreshToken: string
+}
+
 export interface AccessTokenClaims {
   sub: string
   email: string
