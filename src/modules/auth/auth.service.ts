@@ -33,6 +33,8 @@ export class AuthService {
   private readonly accessTtl: JwtSignOptions['expiresIn']
   private readonly refreshTtlSeconds: number
 
+  private readonly recentRotations = new Map<string, { secret: string; until: number }>()
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -93,25 +95,32 @@ export class AuthService {
       throw new UnauthorizedException(REFRESH_REJECTED)
     }
 
-    if (session.expiresAt.getTime() <= Date.now()) {
+    const now = Date.now()
+
+    if (session.expiresAt.getTime() <= now) {
       await this.discard(session.id)
       throw new UnauthorizedException(REFRESH_REJECTED)
     }
 
+    const withinGrace = session.rotatedAt !== null && now - session.rotatedAt.getTime() < ROTATION_GRACE_MS
+
     if (verifySessionSecret(parsed.secret, session.tokenHash)) {
-      return this.rotate(session, ctx)
+      return withinGrace ? this.reissue(session, parsed.secret) : this.rotate(session, ctx)
     }
 
     if (session.prevTokenHash && verifySessionSecret(parsed.secret, session.prevTokenHash)) {
-      const withinGrace = session.rotatedAt !== null && Date.now() - session.rotatedAt.getTime() < ROTATION_GRACE_MS
-
-      if (!withinGrace) {
-        await this.discard(session.id)
-        this.logger.warn(
-          `Refresh token reuse detected for session ${session.id} (user ${session.userId}) — session revoked`,
-        )
+      if (withinGrace) {
+        const current = this.recentRotations.get(session.id)
+        if (current && current.until > now) {
+          return this.reissue(session, current.secret)
+        }
+        throw new UnauthorizedException(REFRESH_REJECTED)
       }
 
+      await this.discard(session.id)
+      this.logger.warn(
+        `Refresh token reuse detected for session ${session.id} (user ${session.userId}) — session revoked`,
+      )
       throw new UnauthorizedException(REFRESH_REJECTED)
     }
 
@@ -164,13 +173,13 @@ export class AuthService {
 
   private async rotate(session: SessionWithUser, ctx: RequestContext): Promise<AuthResult> {
     const secret = await generateSessionSecret()
-
-    await this.prisma.session.update({
-      where: { id: session.id },
+    const now = Date.now()
+    const { count } = await this.prisma.session.updateMany({
+      where: { id: session.id, tokenHash: session.tokenHash },
       data: {
         tokenHash: hashSessionSecret(secret),
         prevTokenHash: session.tokenHash,
-        rotatedAt: new Date(),
+        rotatedAt: new Date(now),
         generation: { increment: 1 },
         expiresAt: this.refreshExpiresAt(),
         ipAddress: ctx.ip,
@@ -178,9 +187,36 @@ export class AuthService {
       },
     })
 
+    if (count === 0) {
+      const current = this.recentRotations.get(session.id)
+      if (current && current.until > now) {
+        return this.reissue(session, current.secret)
+      }
+      throw new UnauthorizedException(REFRESH_REJECTED)
+    }
+
+    this.rememberRotation(session.id, secret, now)
+
     const accessToken = await this.signAccessToken(session.user, session.id)
 
     return { user: session.user, accessToken, refreshToken: encodeSessionToken(session.id, secret) }
+  }
+
+  private async reissue(session: SessionWithUser, secret: string): Promise<AuthResult> {
+    const accessToken = await this.signAccessToken(session.user, session.id)
+    return { user: session.user, accessToken, refreshToken: encodeSessionToken(session.id, secret) }
+  }
+
+  private rememberRotation(sessionId: string, secret: string, now: number): void {
+    this.recentRotations.set(sessionId, { secret, until: now + ROTATION_GRACE_MS })
+
+    if (this.recentRotations.size > 1024) {
+      for (const [id, entry] of this.recentRotations) {
+        if (entry.until <= now) {
+          this.recentRotations.delete(id)
+        }
+      }
+    }
   }
 
   private signAccessToken(user: AuthUser, sessionId: string): Promise<string> {

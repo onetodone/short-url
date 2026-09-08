@@ -4,8 +4,8 @@
  * Assumes the app is already listening on BASE_URL. Walks the critical path:
  * liveness, readiness (Postgres + Redis), register, the guarded create endpoint,
  * the redirect (cache miss then hit), an unknown-code 404, the Prometheus
- * /metrics counters, and the refresh-session lifecycle (rotate, reject the spent
- * secret, logout revokes). Exits non-zero on the first failed check.
+ * /metrics counters, and the refresh-session lifecycle (rotate, a racing tab
+ * converges, logout revokes). Exits non-zero on the first failed check.
  *
  *   node dist/src/main &
  *   BASE_URL=http://localhost:3000 pnpm smoke
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
     }
   }
 
-  // Refresh-session lifecycle: rotate in place, reject the spent secret, then
+  // Refresh-session lifecycle: rotate, a racing tab converges (no 401), then
   // logout revokes the session for good.
   {
     const cookie = (value: string) => ({ cookie: `refresh_token=${value}` })
@@ -176,10 +176,12 @@ async function main(): Promise<void> {
       'refresh rotated the refresh_token cookie',
     )
 
-    const replayRes = await fetch(apiUrl('auth/refresh'), { method: 'POST', headers: cookie(refreshCookie as string) })
+    // A second tab still holding the pre-rotation cookie must converge on the
+    // current token inside the grace window, not get a 401.
+    const raceRes = await fetch(apiUrl('auth/refresh'), { method: 'POST', headers: cookie(refreshCookie as string) })
     assert(
-      replayRes.status === 401,
-      `POST /${API_PREFIX}/auth/refresh with the spent cookie -> 401 (got ${replayRes.status})`,
+      raceRes.status === 200,
+      `POST /${API_PREFIX}/auth/refresh racing the rotation -> 200 (got ${raceRes.status})`,
     )
 
     const logoutRes = await fetch(apiUrl('auth/logout'), {
@@ -190,7 +192,7 @@ async function main(): Promise<void> {
 
     const afterLogoutRes = await fetch(apiUrl('auth/refresh'), {
       method: 'POST',
-      headers: cookie(rotatedCookie as string),
+      headers: cookie((rotatedCookie ?? refreshCookie) as string),
     })
     assert(
       afterLogoutRes.status === 401,
