@@ -27,7 +27,8 @@ import { UserIp } from '@/modules/auth/user-ip.decorator'
 
 const REFRESH_COOKIE = 'refresh_token'
 const DEFAULT_REFRESH_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
-const AUTH_THROTTLE = { default: { limit: 10, ttl: 60_000 } }
+const CREDENTIALS_THROTTLE = { default: { limit: 10, ttl: 60_000 } }
+const REFRESH_THROTTLE = { default: { limit: 120, ttl: 60_000 } }
 
 @Controller(`${API_PREFIX}/auth`)
 export class AuthController {
@@ -49,7 +50,7 @@ export class AuthController {
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(CREDENTIALS_THROTTLE)
   async register(
     @Body() dto: RegisterDto,
     @UserIp() ip: string | undefined,
@@ -62,7 +63,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(CREDENTIALS_THROTTLE)
   async login(
     @Body() dto: LoginDto,
     @UserIp() ip: string | undefined,
@@ -75,7 +76,7 @@ export class AuthController {
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @Throttle(AUTH_THROTTLE)
+  @Throttle(REFRESH_THROTTLE)
   async refresh(
     @Req() request: FastifyRequest,
     @UserIp() ip: string | undefined,
@@ -94,7 +95,6 @@ export class AuthController {
 
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Throttle(AUTH_THROTTLE)
   @UseGuards(JwtAuthGuard)
   async logout(
     @CurrentUser('sessionId') sessionId: string,
@@ -106,7 +106,6 @@ export class AuthController {
 
   @Post('logout-all')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @Throttle(AUTH_THROTTLE)
   @UseGuards(JwtAuthGuard)
   async logoutAll(@CurrentUser('id') userId: string, @Res({ passthrough: true }) reply: FastifyReply): Promise<void> {
     await this.auth.logoutAll(userId)

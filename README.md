@@ -107,11 +107,13 @@ The access token is a stateless 15-minute JWT carrying a `sid` (session) claim. 
 `refresh_token` cookie scoped to `/api/v1/auth`; it is never in a response body.
 
 `POST /auth/refresh` rotates the session **in place** — same row and `sid`, new secret, extended
-expiry. The secret retired at the last rotation stays valid for a 30 s grace window (so a client that
-fires two refreshes at once is not punished for it). Presenting that retired secret **after** the
-window means the token was copied: the whole session is deleted (taking any attacker-rotated copy with
-it) and a `warn` is logged. `POST /auth/logout` revokes the current session, `POST /auth/logout-all`
-revokes all of the caller's; expired rows are also swept hourly (`SESSION_CLEANUP_INTERVAL_MS`).
+expiry. For a 30 s grace window after a rotation, a request that still carries the pre-rotation secret
+**converges** on the current token (a fresh access token, the current refresh cookie re-asserted)
+instead of failing — so parallel browser tabs racing on the same cookie don't log each other out.
+**After** the window, a retired secret means the token was copied: the whole session is deleted
+(taking any attacker-rotated copy with it) and a `warn` is logged. `POST /auth/logout` revokes the
+current session, `POST /auth/logout-all` revokes all of the caller's; expired rows are also swept
+hourly (`SESSION_CLEANUP_INTERVAL_MS`).
 
 The submitted URL is normalised (`new URL().href`) before it is stored, so
 `  HTTPS://Example.COM/A B  ` persists as `https://example.com/A%20B`. Duplicate URLs always get a
