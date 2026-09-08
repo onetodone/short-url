@@ -5,6 +5,7 @@ import { JwtModule } from '@nestjs/jwt'
 import { AuthController } from '@/modules/auth/auth.controller'
 import { AuthService } from '@/modules/auth/auth.service'
 import { JwtAuthGuard } from '@/modules/auth/jwt-auth.guard'
+import { SessionCleanupService } from '@/modules/auth/session-cleanup.service'
 
 @Module({
   imports: [
@@ -16,7 +17,7 @@ import { JwtAuthGuard } from '@/modules/auth/jwt-auth.guard'
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard],
+  providers: [AuthService, JwtAuthGuard, SessionCleanupService],
   exports: [JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}

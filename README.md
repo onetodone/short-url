@@ -20,7 +20,7 @@ waits on a database write.
 - **Storage:** PostgreSQL via Prisma 7 (`prisma-client` generator, `pg` driver adapter)
 - **Cache / buffer:** Redis via `ioredis`
 - **Validation:** `zod` DTOs through `nestjs-zod`
-- **Auth:** stateless JWT (access + refresh), custom guard — no Passport
+- **Auth:** stateless access JWT + Postgres-backed rotating refresh sessions (revocable, reuse-detecting), custom guard — no Passport
 - **Observability:** `nestjs-pino` structured logs, Prometheus `/metrics`, `/health` + `/health/ready`
 - **Rate limiting:** `@nestjs/throttler` (in-memory, per-IP)
 
@@ -83,9 +83,11 @@ endpoints (`/health`, `/health/ready`, `/metrics`).
 
 | Method & path                    | Auth                                         | Body                                               | Result                                                                                                    |
 | -------------------------------- | -------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `POST /api/v1/auth/register`     | –                                            | `{ email, password }` (password 8–128)             | `201 { user, accessToken, refreshToken }` + `refresh_token` cookie                                        |
-| `POST /api/v1/auth/login`        | –                                            | `{ email, password }`                              | `200 { user, accessToken, refreshToken }` + cookie                                                        |
-| `POST /api/v1/auth/refresh`      | refresh token (cookie or `{ refreshToken }`) | –                                                  | `200` rotated token pair                                                                                  |
+| `POST /api/v1/auth/register`     | –                                            | `{ email, password }` (password 8–128)             | `201 { user, accessToken }` + `refresh_token` cookie                                                      |
+| `POST /api/v1/auth/login`        | –                                            | `{ email, password }`                              | `200 { user, accessToken }` + `refresh_token` cookie                                                      |
+| `POST /api/v1/auth/refresh`      | `refresh_token` cookie                       | –                                                  | `200 { user, accessToken }` + rotated `refresh_token` cookie                                              |
+| `POST /api/v1/auth/logout`       | Bearer access token                          | –                                                  | `204` — revokes this session · clears the cookie                                                          |
+| `POST /api/v1/auth/logout-all`   | Bearer access token                          | –                                                  | `204` — revokes every session the caller owns                                                             |
 | `GET /api/v1/auth/me`            | Bearer access token                          | –                                                  | `200 { id, email, createdAt }`                                                                            |
 | `POST /api/v1/urls`              | Bearer access token                          | `{ url }` (`http`/`https`, ≤ 2048 chars)           | `201 { shortCode, shortUrl, originalUrl, createdAt, updatedAt }`                                          |
 | `GET /api/v1/urls`               | Bearer access token                          | `?limit` (1–100, def. 20), `?offset` (≥ 0, def. 0) | `200 { items[], total, limit, offset }` — caller's URLs, newest first                                     |
@@ -96,6 +98,20 @@ endpoints (`/health`, `/health/ready`, `/metrics`).
 | `GET /health/ready`              | –                                            | –                                                  | `200 { status, database, redis }` · `503` if a dependency is down                                         |
 | `GET /metrics`                   | –                                            | –                                                  | `200` Prometheus text exposition                                                                          |
 | `GET /api/v1`                    | –                                            | –                                                  | `200 { name, version }`                                                                                   |
+
+### Sessions & token rotation
+
+The access token is a stateless 15-minute JWT carrying a `sid` (session) claim. The refresh token is
+**not** a JWT — it is the opaque string `sessionId.secret`, and only `sha256(secret)` is stored, in a
+`sessions` row created per login. It travels solely in the `httpOnly`, `SameSite=Strict`
+`refresh_token` cookie scoped to `/api/v1/auth`; it is never in a response body.
+
+`POST /auth/refresh` rotates the session **in place** — same row and `sid`, new secret, extended
+expiry. The secret retired at the last rotation stays valid for a 30 s grace window (so a client that
+fires two refreshes at once is not punished for it). Presenting that retired secret **after** the
+window means the token was copied: the whole session is deleted (taking any attacker-rotated copy with
+it) and a `warn` is logged. `POST /auth/logout` revokes the current session, `POST /auth/logout-all`
+revokes all of the caller's; expired rows are also swept hourly (`SESSION_CLEANUP_INTERVAL_MS`).
 
 The submitted URL is normalised (`new URL().href`) before it is stored, so
 `  HTTPS://Example.COM/A B  ` persists as `https://example.com/A%20B`. Duplicate URLs always get a
@@ -169,8 +185,9 @@ the `env` object it exports. An invalid `.env` fails fast at startup.
 | `CACHE_LOCK_TTL_MS`                            | `3000`                    | `SET NX` stampede-lock TTL                     |
 | `CLICKS_FLUSH_INTERVAL_MS`                     | `5000`                    | Click-buffer flush cadence                     |
 | `THROTTLE_TTL` / `THROTTLE_LIMIT`              | `60000` / `100`           | Global per-IP rate limit (ms / requests)       |
-| `JWT_SECRET`                                   | –                         | ≥ 16 chars, signs both token types (required)  |
-| `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN`    | `15m` / `7d`              | Token lifetimes                                |
+| `JWT_SECRET`                                   | –                         | ≥ 16 chars, signs the access token (required)  |
+| `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES_IN`    | `15m` / `7d`              | Access-token lifetime / refresh-session TTL    |
+| `SESSION_CLEANUP_INTERVAL_MS`                  | `3600000`                 | Expired-session sweep cadence (min `60000`)    |
 
 ---
 
@@ -325,7 +342,7 @@ src/
   redis/                     tuned ioredis client + @Global module + InjectRedis()
   modules/
     urls/                    create + list + update + delete + resolve, short-code CSPRNG, click buffer, redirect controller
-    auth/                    bcrypt, JWT issue/verify, guard, @CurrentUser, cookie handling
+    auth/                    bcrypt, access-JWT issue/verify, rotating refresh sessions + reuse detection, logout, hourly sweep
     health/                  liveness + readiness
     metrics/                 in-memory counters + Prometheus endpoint
 prisma/
